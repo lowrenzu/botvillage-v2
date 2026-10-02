@@ -109,9 +109,6 @@ export function UI() {
     setDraft('')
   }
 
-  const linkLabel =
-    link === 'live' ? 'Agents en direct' : link === 'down' ? 'Agents coupés' : 'Hors ligne'
-
   return (
     <aside className={'hud-rail' + (railOpen ? '' : ' collapsed')} aria-label="Bureau des agents">
       <header className="rail-head">
@@ -137,11 +134,9 @@ export function UI() {
       {railOpen && (
         <>
       <div className="rail-stats">
-        <span><i className="dot-live" />{agents.length} au roster</span>
-        <span>{working} au travail</span>
-        <span>{collab} en discussion (déduit)</span>
-        <span>{sleeping} au repos</span>
-        <span className="rail-link">{linkLabel}</span>
+        <span><i className="dot-live" />{agents.length} roster</span>
+        <span>{working} travail</span>
+        <span>{collab ? collab + ' discussion' : sleeping + ' idle'}</span>
       </div>
 
       {agents.length > 0 && (
@@ -181,11 +176,10 @@ export function UI() {
         </div>
       )}
 
-      <p className="honest-note" title="Les arêtes bleues 3D sont une déduction locale (talkUntil / pairing), pas des liens transcript. HUD et tags portent aussi « déduit ».">Arêtes bleues = discussion déduite (pas transcript)</p>
+      <p className="honest-note" title="Arêtes bleues 3D = pairing local (talkUntil), pas un lien transcript.">Arêtes bleues = déduit</p>
       <div className="day-strip" aria-label="Mini timeline de session">
         <div className="day-strip-head">
           <span className="day-strip-title">Session</span>
-          <span className="day-strip-hint">marche · travail · consigne · discussion</span>
         </div>
         <div className="frieze day-frieze" role="list">
           {dayStrip.length === 0 ? (
@@ -294,18 +288,7 @@ export function UI() {
             </button>
           ) : null}
         </div>
-        {a ? (
-          <div
-            className={'phase-chip phase-' + a.promptPhase}
-            title={PHASE_HINT[a.promptPhase]}
-            role="status"
-            aria-label={'Phase consigne : ' + PHASE[a.promptPhase]}
-          >
-            <i className="phase-dot" />
-            <span className="phase-key">{PHASE[a.promptPhase]}</span>
-            <span className="phase-hint">{PHASE_HINT[a.promptPhase]}</span>
-          </div>
-        ) : null}
+
       </div>
         </>
       )}
@@ -371,10 +354,10 @@ function AgentCard({ a, mates }: { a: Agent; mates: Agent[] }) {
         </div>
         {a.goal ? (
           <p className="task" title={a.goal}>
-            Objectif · {a.goal.length > 42 ? a.goal.slice(0, 42) + '…' : a.goal}
+            Extrait · {a.goal.length > 48 ? a.goal.slice(0, 48) + '…' : a.goal}
           </p>
         ) : a.title ? (
-          <p className="task">{a.title}</p>
+          <p className="task" title={a.title}>Extrait · {a.title.length > 48 ? a.title.slice(0, 48) + '…' : a.title}</p>
         ) : null}
       </div>
 

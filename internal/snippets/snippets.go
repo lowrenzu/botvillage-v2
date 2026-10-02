@@ -247,32 +247,38 @@ func GenericChatter(kind Kind) string {
 	return ""
 }
 
-// GoalWord extracts a single short display word from title/description.
+// GoalWord returns an honest truncated snippet from title/description
+// (not a semantic "goal"). Prefer title; else first meaningful description text.
+// Cap ~48 runes so HUD "Extrait" is readable without inventing objectives.
 func GoalWord(title, description string) string {
-	t := strings.TrimSpace(title)
-	if t != "" {
-		fields := strings.Fields(t)
-		if len(fields) > 0 {
-			w := fields[0]
-			if len(w) > 16 {
-				w = w[:16]
-			}
-			return w
+	const max = 48
+	clip := func(s string) string {
+		s = strings.Join(strings.Fields(s), " ")
+		if s == "" {
+			return ""
 		}
+		r := []rune(s)
+		if len(r) > max {
+			return string(r[:max]) + "…"
+		}
+		return s
+	}
+	if t := strings.TrimSpace(title); t != "" {
+		return clip(t)
 	}
 	d := strings.TrimSpace(description)
 	if d == "" {
 		return ""
 	}
-	// first meaningful word, skip dashes/bullets
-	for _, f := range strings.Fields(d) {
+	// skip leading dashes/bullets noise
+	fields := strings.Fields(d)
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
 		f = strings.Trim(f, "—–-•*,.")
-		if len(f) >= 2 && !strings.HasPrefix(f, "http") {
-			if len(f) > 16 {
-				f = f[:16]
-			}
-			return f
+		if len(f) < 2 || strings.HasPrefix(f, "http") {
+			continue
 		}
+		out = append(out, f)
 	}
-	return ""
+	return clip(strings.Join(out, " "))
 }
