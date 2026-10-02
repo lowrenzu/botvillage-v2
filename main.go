@@ -43,6 +43,9 @@ func main() {
 	rootDir, _ := os.Getwd()
 	webhookPath := filepath.Join(rootDir, "webhook.json")
 	wakesPath := filepath.Join(rootDir, "wakes.jsonl")
+	if err := loadFromDisk(); err != nil {
+		log.Printf("sessions: %v", err)
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -275,6 +278,7 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
 			Secure:   cookieSecure(r),
+			Expires:  time.Now().Add(sessionTTL),
 			MaxAge:   60 * 60 * 24 * 30,
 		})
 		if r.Header.Get("Accept") == "application/json" {
@@ -484,6 +488,9 @@ func isGrokBuildTarget(target, name, id string) bool {
 }
 
 // opaque sessions: cookie value is random; never the prompt token.
+// The file is local runtime state, deliberately separate from the webhook key.
+const sessionFile = ".village-sessions"
+
 var (
 	sessionMu  sync.Mutex
 	sessionOK  = map[string]time.Time{} // id → expiry
@@ -498,10 +505,85 @@ func newSessionID() string {
 	return hex.EncodeToString(b[:])
 }
 
+// loadFromDisk restores opaque sessions after a process restart. Expired entries
+// are dropped and the pruned object is written back.
+func loadFromDisk() error {
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+
+	b, err := os.ReadFile(sessionFile)
+	if os.IsNotExist(err) {
+		sessionOK = map[string]time.Time{}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var stored map[string]int64
+	if err := json.Unmarshal(b, &stored); err != nil {
+		return err
+	}
+
+	now := time.Now()
+	loaded := make(map[string]time.Time, len(stored))
+	for id, unix := range stored {
+		if id == "" || unix <= now.Unix() {
+			continue
+		}
+		loaded[id] = time.Unix(unix, 0)
+	}
+	pruned := len(loaded) != len(stored)
+	sessionOK = loaded
+	if pruned {
+		return saveSessionsLocked()
+	}
+	return nil
+}
+
 func putSession(id string) {
 	sessionMu.Lock()
 	defer sessionMu.Unlock()
-	sessionOK[id] = time.Now().Add(sessionTTL)
+	now := time.Now()
+	for existing, exp := range sessionOK {
+		if !exp.After(now) {
+			delete(sessionOK, existing)
+		}
+	}
+	sessionOK[id] = now.Add(sessionTTL)
+	if err := saveSessionsLocked(); err != nil {
+		log.Printf("sessions: save: %v", err)
+	}
+}
+
+func saveSessionsLocked() error {
+	stored := make(map[string]int64, len(sessionOK))
+	for id, exp := range sessionOK {
+		if id != "" {
+			stored[id] = exp.Unix()
+		}
+	}
+	b, err := json.Marshal(stored)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(".", sessionFile+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(append(b, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, sessionFile)
 }
 
 func validSession(id string) bool {
@@ -514,8 +596,11 @@ func validSession(id string) bool {
 	if !ok {
 		return false
 	}
-	if time.Now().After(exp) {
+	if !time.Now().Before(exp) {
 		delete(sessionOK, id)
+		if err := saveSessionsLocked(); err != nil {
+			log.Printf("sessions: save after expiry: %v", err)
+		}
 		return false
 	}
 	return true

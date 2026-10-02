@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"botvillage/internal/hub"
 	"botvillage/internal/roster"
@@ -316,6 +317,9 @@ func TestOpaqueSessionCookie(t *testing.T) {
 			if !c.HttpOnly {
 				t.Fatal("HttpOnly")
 			}
+			if c.Expires.IsZero() {
+				t.Fatal("Expires expected")
+			}
 		}
 	}
 	if sid == "" {
@@ -332,5 +336,60 @@ func TestOpaqueSessionCookie(t *testing.T) {
 	bad.AddCookie(&http.Cookie{Name: "village_session", Value: tok})
 	if authorized(bad, tok) {
 		t.Fatal("raw token as cookie must NOT authorize")
+	}
+}
+
+func TestPersistentSessionsRoundTripAndPrune(t *testing.T) {
+	t.Chdir(t.TempDir())
+	defer func() {
+		sessionMu.Lock()
+		sessionOK = map[string]time.Time{}
+		sessionMu.Unlock()
+	}()
+
+	const liveID = "live-session"
+	putSession(liveID)
+	sessionMu.Lock()
+	sessionOK = map[string]time.Time{}
+	sessionMu.Unlock()
+	if err := loadFromDisk(); err != nil {
+		t.Fatalf("load persisted session: %v", err)
+	}
+	if !validSession(liveID) {
+		t.Fatal("persisted session should survive an empty in-memory map")
+	}
+
+	expiredID := "expired-session"
+	freshID := "fresh-session"
+	stored := map[string]int64{
+		expiredID: time.Now().Add(-time.Hour).Unix(),
+		freshID:   time.Now().Add(time.Hour).Unix(),
+	}
+	b, _ := json.Marshal(stored)
+	if err := os.WriteFile(sessionFile, b, 0o600); err != nil {
+		t.Fatalf("write expired fixture: %v", err)
+	}
+	sessionMu.Lock()
+	sessionOK = map[string]time.Time{}
+	sessionMu.Unlock()
+	if err := loadFromDisk(); err != nil {
+		t.Fatalf("load and prune sessions: %v", err)
+	}
+	if validSession(expiredID) {
+		t.Fatal("expired session should be pruned")
+	}
+	if !validSession(freshID) {
+		t.Fatal("fresh session should remain after pruning")
+	}
+	var pruned map[string]int64
+	b, err := os.ReadFile(sessionFile)
+	if err != nil {
+		t.Fatalf("read pruned sessions: %v", err)
+	}
+	if err := json.Unmarshal(b, &pruned); err != nil {
+		t.Fatalf("decode pruned sessions: %v", err)
+	}
+	if _, ok := pruned[expiredID]; ok {
+		t.Fatal("expired session remained on disk")
 	}
 }

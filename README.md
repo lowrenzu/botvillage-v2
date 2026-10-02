@@ -52,7 +52,7 @@ Ouvre http://127.0.0.1:8040/api/health. Attendu : `ok` true, `grokBuild` true si
 
 Vide `VILLAGE_ALLOW` = tous les agents ; `VILLAGE_EXCLUDE` les cache côté serveur. Le client ne filtre que si `health.allowedIds` est non vide.
 
-Le jeton HUD n’est pas la clé webhook. Hors loopback, la première page demande le jeton et pose un cookie `village_session` **opaque** (id aléatoire côté serveur — jamais le secret brut). Le champ jeton HUD alimente seulement le header `X-Village-Token` **en mémoire** (pas de localStorage du secret). Auth durable = cookie HttpOnly (+ `Secure` si TLS / `X-Forwarded-Proto: https`). `VILLAGE_LOCAL=1` ne saute plus l’auth pour les clients non-loopback (Tailscale / LAN) : seuls `127.0.0.1` / `::1` restent ouverts sans jeton. Pose `VILLAGE_PROMPT_TOKEN` (ou un fichier `.prompt-token` gitignoré) dès que tu écoutes `0.0.0.0` ou que tu accèdes via Tailscale.
+Le jeton HUD n’est pas la clé webhook. Hors loopback, la première page demande le jeton et pose un cookie `village_session` **opaque** (id aléatoire côté serveur — jamais le secret brut), conservé dans le fichier local `.village-sessions` pour survivre aux redémarrages (ce n’est toujours pas la clé webhook). Le champ jeton HUD alimente seulement le header `X-Village-Token` **en mémoire** (pas de localStorage du secret). Auth durable = cookie HttpOnly (+ `Secure` si TLS / `X-Forwarded-Proto: https`). `VILLAGE_LOCAL=1` ne saute plus l’auth pour les clients non-loopback (Tailscale / LAN) : seuls `127.0.0.1` / `::1` restent ouverts sans jeton. Pose `VILLAGE_PROMPT_TOKEN` (ou un fichier `.prompt-token` gitignoré) dès que tu écoutes `0.0.0.0` ou que tu accèdes via Tailscale.
 
 ## Docker
 
