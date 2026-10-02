@@ -12,6 +12,42 @@ git clone git@github.com:lowrenzu/botvillage.git
 cd botvillage
 ```
 
+
+## Share with another Grok Bot user (e.g. Anna)
+
+Goal: send **one link** — her Grok Bot clones, builds, and runs the office against **her** `agent-data` (her agents only).
+
+### Link to send
+
+https://github.com/lowrenzu/botvillage
+
+### Prompt she can paste to her Grok Bot / Grok Build
+
+```
+Install botvillage from https://github.com/lowrenzu/botvillage on my box PC.
+
+1. git clone https://github.com/lowrenzu/botvillage.git && cd botvillage
+2. cd web && npm install && npm run build && cd ..
+3. go build -o botvillage .
+4. Copy webhook.json.example → webhook.json and fill MY webhook url+key (never commit).
+5. Run with MY agents:
+   AGENT_DATA=/home/box/agent-data ./botvillage --listen 0.0.0.0:8040
+6. Open http://127.0.0.1:8040/ (or my Tailscale MagicDNS :8040).
+7. Confirm /api/health shows my bot count. Do not use someone else's AGENT_DATA or webhook.json.
+```
+
+### What “her agents” means
+
+- Roster = directories under **her** `$AGENT_DATA/agents/` only.
+- No shared Tailscale / webhook / secrets from another user.
+- Optional: `VILLAGE_WS_ORIGINS` if she opens via MagicDNS (see above).
+
+### Demo without her agents
+
+```bash
+go run . --demo --listen 0.0.0.0:8040
+```
+
 ## Demo (no real agents)
 
 ```bash
