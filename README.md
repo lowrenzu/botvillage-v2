@@ -5,6 +5,8 @@ Stack: **Go** backend (roster, WebSocket, prompt webhook) + **Vite / React / R3F
 
 Default listen: `0.0.0.0:8040`.
 
+![Bureau des agents — live office](docs/screenshot.png)
+
 ## Clone
 
 ```bash
