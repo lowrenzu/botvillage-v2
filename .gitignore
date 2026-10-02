@@ -1,4 +1,5 @@
 # secrets / local runtime
+.prompt-token
 webhook.json
 wakes.jsonl
 *.log

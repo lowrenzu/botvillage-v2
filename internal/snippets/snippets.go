@@ -1,10 +1,12 @@
 // Package snippets classifies transcript JSONL lines into activity kinds
-// without exposing real message text to the UI.
+// and extracts short plain-text snippets for speech bubbles.
 package snippets
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // Kind is a coarse activity classification for village visuals.
@@ -17,6 +19,9 @@ const (
 	KindOther  Kind = "other"
 	KindGrowth Kind = "growth" // any new line / file growth
 )
+
+// MaxBubbleRunes caps bubble text to match client truncation (~40–80).
+const MaxBubbleRunes = 72
 
 // Event is a classified transcript event (no raw text).
 type Event struct {
@@ -38,10 +43,11 @@ type messageBody struct {
 type contentPart struct {
 	Type string `json:"type"`
 	Name string `json:"name"`
+	Text string `json:"text"`
 }
 
 // ClassifyLine inspects one JSONL line and returns a Kind + role.
-// Real text is never returned.
+// Use SnippetText separately when a short bubble string is needed.
 func ClassifyLine(line []byte) (Kind, string) {
 	line = trimSpace(line)
 	if len(line) == 0 {
@@ -116,19 +122,129 @@ func trimSpace(b []byte) []byte {
 	return b[i:j]
 }
 
-// GenericChatter returns a safe bubble string keyed by kind (never real text).
-func GenericChatter(kind Kind) string {
-	switch kind {
-	case KindUser:
-		phrases := []string{"hey!", "got it", "listening", "mm?", "yo"}
-		return phrases[len(kind)%len(phrases)]
-	case KindTool:
-		return "…"
-	case KindAssist:
-		return "on it"
-	default:
-		return "hmm"
+// secretish rejects snippets that look like keys/tokens/credentials.
+var (
+	secretKeyword = regexp.MustCompile(`(?i)(api[_-]?key|secret|password|passwd|token|bearer|authorization|private[_-]?key|BEGIN (RSA |EC |OPENSSH )?PRIVATE)`)
+	longToken     = regexp.MustCompile(`(?i)\b(sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b`)
+	hiddenPrompt  = regexp.MustCompile(`(?i)\[SAND_HIDDEN_PROMPT\]|^\[agent\]|SYSTEM PROMPT`)
+)
+
+// SnippetText pulls the first plain-text content part from a transcript JSONL
+// line, sanitized and capped for speech bubbles. When there is no prose but a
+// tool_use/tool_call is present, returns the concrete tool name (e.g. "Shell").
+// Returns "" when nothing extractable (secrets, empty, or unparseable).
+func SnippetText(line []byte) string {
+	line = trimSpace(line)
+	if len(line) == 0 {
+		return ""
 	}
+	var env lineEnvelope
+	if err := json.Unmarshal(line, &env); err != nil {
+		return ""
+	}
+	raw := env.Message
+	if len(raw) == 0 {
+		// some shapes put content at top level
+		raw = line
+	}
+	text := firstTextPart(raw)
+	if s := cleanSnippet(text); s != "" {
+		return s
+	}
+	// no prose — fall back to concrete tool/action name
+	if name := firstToolName(raw); name != "" {
+		return cleanSnippet(name)
+	}
+	return ""
+}
+
+func firstTextPart(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var msg messageBody
+	if err := json.Unmarshal(raw, &msg); err == nil && len(msg.Content) > 0 {
+		for _, p := range msg.Content {
+			if p.Type == "text" || p.Type == "" {
+				if t := strings.TrimSpace(p.Text); t != "" {
+					return t
+				}
+			}
+		}
+		return ""
+	}
+	var parts []contentPart
+	if err := json.Unmarshal(raw, &parts); err == nil {
+		for _, p := range parts {
+			if p.Type == "text" || p.Type == "" {
+				if t := strings.TrimSpace(p.Text); t != "" {
+					return t
+				}
+			}
+		}
+	}
+	// rare: message is a bare string
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return strings.TrimSpace(s)
+	}
+	return ""
+}
+
+func firstToolName(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	walk := func(parts []contentPart) string {
+		for _, p := range parts {
+			if p.Type == "tool_use" || p.Type == "tool_call" || p.Type == "function" {
+				if n := strings.TrimSpace(p.Name); n != "" {
+					return n
+				}
+			}
+		}
+		return ""
+	}
+	var msg messageBody
+	if err := json.Unmarshal(raw, &msg); err == nil && len(msg.Content) > 0 {
+		return walk(msg.Content)
+	}
+	var parts []contentPart
+	if err := json.Unmarshal(raw, &parts); err == nil {
+		return walk(parts)
+	}
+	return ""
+}
+
+func cleanSnippet(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	// collapse whitespace / strip newlines for bubble
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return ""
+	}
+	// skip internal/hidden prompts and secret-looking content
+	if hiddenPrompt.MatchString(s) {
+		return ""
+	}
+	if secretKeyword.MatchString(s) || longToken.MatchString(s) {
+		return ""
+	}
+	if utf8.RuneCountInString(s) > MaxBubbleRunes {
+		runes := []rune(s)
+		s = string(runes[:MaxBubbleRunes-1]) + "…"
+	}
+	return s
+}
+
+// GenericChatter is deprecated for speech bubbles — prefer empty/hidden over
+// invented status ("on it", "hey!"). Kept returning "" so old call sites stay safe.
+func GenericChatter(kind Kind) string {
+	_ = kind
+	return ""
 }
 
 // GoalWord extracts a single short display word from title/description.

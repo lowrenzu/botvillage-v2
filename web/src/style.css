@@ -329,13 +329,7 @@ html, body, #root {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.bar {
-  height: 6px;
-  background: rgba(28, 28, 30, 0.08);
-  border-radius: var(--r-pill);
-  overflow: hidden;
-}
-.bar i { display: block; height: 100%; border-radius: inherit; background: var(--ink); }
+/* fake % progress bar removed — honesty (Elon GO) */
 
 .agent .cta {
   display: inline-flex;
@@ -503,6 +497,15 @@ button { font: inherit; }
   font-family: var(--font);
 }
 .tag.on { outline: 2px solid rgba(28, 28, 30, 0.18); }
+.tag.always {
+  opacity: 0.95;
+  transform: scale(0.92);
+  transform-origin: center bottom;
+  pointer-events: none;
+}
+.tag.always.on { opacity: 1; transform: scale(1); }
+.tag.work small { color: #2f6b4f; font-weight: 700; }
+
 .tag small { color: var(--mt); display: block; font-size: 11px; font-weight: 500; }
 .dot, .rl i {
   display: inline-block;
@@ -830,12 +833,14 @@ button { font: inherit; }
 }
 .frieze-chip.kind-talk b { color: #3d7ab8; }
 
+/* Speech bubble = real transcript only. Hidden by default; .is-on from useFrame (same for every agent). */
 .speech-bubble {
   position: relative;
   max-width: 160px;
+  min-width: 36px;
   padding: 6px 10px;
   border-radius: 12px 12px 12px 4px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(28, 28, 30, 0.12);
   box-shadow: 0 4px 14px rgba(20, 24, 32, 0.12);
   color: #2a2e34;
@@ -845,7 +850,14 @@ button { font: inherit; }
   word-break: break-word;
   pointer-events: none;
   transform: translateY(-4px);
+  visibility: hidden;
+  opacity: 0;
 }
+.speech-bubble.is-on {
+  visibility: visible;
+  opacity: 1;
+}
+.speech-bubble-text:empty { display: none; }
 .speech-bubble::after {
   content: "";
   position: absolute;
@@ -853,7 +865,7 @@ button { font: inherit; }
   bottom: -6px;
   width: 10px;
   height: 10px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   border-right: 1px solid rgba(28, 28, 30, 0.12);
   border-bottom: 1px solid rgba(28, 28, 30, 0.12);
   transform: rotate(45deg);
@@ -924,3 +936,73 @@ img.agent-av { width: 36px; height: 36px; border-radius: 12px; }
 .vote-n { font-variant-numeric: tabular-nums; color: var(--mu); font-size: 11px; min-width: 1.2em; text-align: right; }
 .vote-btns { display: flex; gap: 2px; }
 .vote-btns i { min-width: 22px; min-height: 22px; display: grid; place-items: center; font-style: normal; border-radius: 6px; background: rgba(0,0,0,.04); }
+
+/* Dense roster when >4 bots — compact rows, still scannable */
+.roster.dense {
+  max-height: 36%;
+  gap: 2px;
+}
+.roster.dense button {
+  padding: 4px 8px 4px 5px;
+  gap: 6px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.roster.dense .av {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+}
+.roster.dense img.av {
+  width: 20px;
+  height: 20px;
+}
+.roster.dense .vote-btns { gap: 2px; }
+.roster.dense .vote-n { font-size: 10px; min-width: 12px; }
+.roster.dense .roster-phase {
+  font-size: 9px;
+  padding: 1px 5px;
+}
+
+/* Real prompt-ack toast (WS only) */
+.toast-stack {
+  position: fixed;
+  left: 18px;
+  bottom: 22px;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(320px, 70vw);
+}
+.toast {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(28, 24, 20, 0.88);
+  color: #f3efe6;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 10px 28px rgba(20, 16, 12, 0.28);
+  border: 1px solid rgba(255, 248, 235, 0.12);
+  animation: toast-in .28s ease-out;
+}
+.toast.ack::before {
+  content: '✓ ';
+  color: #6ee7a0;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+.honest-note {
+  margin: 0 12px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--mt);
+  opacity: 0.75;
+  letter-spacing: 0.01em;
+}

@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -116,9 +117,12 @@ func main() {
 
 	promptTok := resolvePromptToken()
 	if promptTok == "" {
-		log.Printf("prompt auth: open on this process (set VILLAGE_PROMPT_TOKEN before exposing the port)")
+		log.Printf("prompt auth: loopback only without token (set VILLAGE_PROMPT_TOKEN or .prompt-token before exposing the port)")
 	} else {
-		log.Printf("prompt auth: VILLAGE_PROMPT_TOKEN required (webhook key is never sent to the browser)")
+		log.Printf("prompt auth: non-loopback requires VILLAGE_PROMPT_TOKEN (webhook key is never sent to the browser)")
+	}
+	if os.Getenv("VILLAGE_LOCAL") == "1" && strings.HasPrefix(*listen, "0.0.0.0") {
+		log.Printf("VILLAGE_LOCAL=1 with %s: remotes still need the prompt token (loopback peers only are open)", *listen)
 	}
 
 	mux := http.NewServeMux()
@@ -372,6 +376,7 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 		if body.Target == "grok-build" || strings.EqualFold(body.Name, "grok") {
 			text, err := d.grok.Reply(body.Prompt)
 			if err != nil {
+				d.h.PromptRollback(body.ID)
 				writePromptResult(w, 502, err.Error(), err)
 				return
 			}
@@ -384,6 +389,9 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 			Name:   body.Name,
 			Prompt: body.Prompt,
 		})
+		if err != nil {
+			d.h.PromptRollback(body.ID)
+		}
 		writePromptResult(w, status, detail, err)
 	})
 
@@ -403,11 +411,19 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		allowed := roster.AllowSet()
+		allowedIDs := make([]string, 0, len(allowed))
+		for id := range allowed {
+			allowedIDs = append(allowedIDs, id)
+		}
+		sort.Strings(allowedIDs)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok":      true,
-			"demo":    d.demoMode,
-			"webhook": d.wh.Configured(),
-			"bots":    len(d.h.Bots()),
+			"ok":         true,
+			"demo":       d.demoMode,
+			"webhook":    d.wh.Configured(),
+			"grokBuild":  d.grok.Configured(),
+			"bots":       len(d.h.Bots()),
+			"allowedIds": allowedIDs, // empty ⇒ no client-side filter (all roster bots)
 		})
 	})
 }
@@ -441,10 +457,17 @@ func appendGrokLine(path, text string) error {
 	return err
 }
 
-// resolvePromptToken reads only VILLAGE_PROMPT_TOKEN.
+// resolvePromptToken reads VILLAGE_PROMPT_TOKEN, else optional .prompt-token file.
 // The webhook key stays on disk and is never copied into the page.
 func resolvePromptToken() string {
-	return strings.TrimSpace(os.Getenv("VILLAGE_PROMPT_TOKEN"))
+	if t := strings.TrimSpace(os.Getenv("VILLAGE_PROMPT_TOKEN")); t != "" {
+		return t
+	}
+	b, err := os.ReadFile(".prompt-token")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 func checkPromptAuth(r *http.Request, token string) bool {
@@ -464,8 +487,9 @@ func checkPromptAuth(r *http.Request, token string) bool {
 	return false
 }
 
-// authorized allows loopback and VILLAGE_LOCAL=1 without a token.
-// Any other client needs the header or the village_session cookie.
+// authorized allows loopback without a token.
+// Non-loopback clients always need VILLAGE_PROMPT_TOKEN (header or village_session cookie),
+// even when VILLAGE_LOCAL=1 (that flag must not open Tailscale/LAN peers).
 func authorized(r *http.Request, token string) bool {
 	if localRequest(r) {
 		return true
@@ -483,10 +507,9 @@ func authorized(r *http.Request, token string) bool {
 	return subtle.ConstantTimeCompare([]byte(c.Value), []byte(token)) == 1
 }
 
+// localRequest is true only for loopback peers.
+// VILLAGE_LOCAL=1 never bypasses auth for non-loopback (Tailscale / LAN) clients.
 func localRequest(r *http.Request) bool {
-	if os.Getenv("VILLAGE_LOCAL") == "1" {
-		return true
-	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr

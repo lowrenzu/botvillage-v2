@@ -15,12 +15,11 @@ import (
 )
 
 const (
-	quietZzzAfter  = 2 * time.Minute
-	workDuration   = 4 * time.Second
-	talkDuration   = 3 * time.Second
+	workDuration = 4 * time.Second // demo / brief pulses; live uses transcriptWorkHold
+	talkDuration = 3 * time.Second
 )
 
-// Activity is pushed to browsers (no real transcript text).
+// Activity is pushed to browsers; Bubble may carry a short sanitized reply snippet.
 type Activity struct {
 	Type    string       `json:"type"` // state|roster|ping|bubble
 	AgentID string       `json:"agentId,omitempty"`
@@ -31,9 +30,10 @@ type Activity struct {
 }
 
 type botRuntime struct {
-	bot       roster.Bot
-	lastEvent time.Time
-	until     time.Time
+	bot         roster.Bot
+	lastEvent   time.Time
+	until       time.Time
+	gatewayHold bool // set while SyncGatewayRunning last saw isRunning for this bot
 }
 
 // Hub fans out roster + activity to websocket clients.
@@ -45,6 +45,9 @@ type Hub struct {
 	clients map[*websocket.Conn]struct{}
 
 	upgrader websocket.Upgrader
+
+	// lastGatewaySig logs when the set of gateway-busy roster names changes
+	lastGatewaySig string
 }
 
 func New(root roster.Root) *Hub {
@@ -122,18 +125,22 @@ func (h *Hub) HandleLine(line tail.Line) {
 	switch kind {
 	case snippets.KindUser:
 		state = "talk"
-		bubble = "" // no invented speech
-		rt.until = now.Add(talkDuration)
+		// brief clean user prompt when extractable; never invent
+		bubble = snippets.SnippetText(line.Data)
+		rt.until = now.Add(transcriptTalkHold)
 	case snippets.KindTool:
 		state = "work"
-		bubble = ""
-		rt.until = now.Add(workDuration)
+		// concrete tool name when extractable; empty better than "Travaille"
+		bubble = snippets.SnippetText(line.Data)
+		rt.until = now.Add(transcriptWorkHold)
 	case snippets.KindAssist:
-		state = "work"
-		rt.until = now.Add(workDuration / 2)
+		state = "talk"
+		// real assistant prose only — never GenericChatter / status filler
+		bubble = snippets.SnippetText(line.Data)
+		rt.until = now.Add(transcriptTalkHold)
 	default:
 		state = "walk"
-		rt.until = now.Add(2 * time.Second)
+		rt.until = now.Add(5 * time.Second)
 	}
 	rt.bot.State = state
 	rt.bot.Updated = now
@@ -156,8 +163,10 @@ func (h *Hub) HandleLine(line tail.Line) {
 	h.broadcast(act)
 }
 
-// Tick advances idle→zzz and clears expired work/talk.
+// Tick clears expired transcript holds and syncs gateway isRunning.
+// Never invents zzz/walk — busy only from gateway or real transcript lines.
 func (h *Hub) Tick() {
+	h.SyncGatewayRunning()
 	h.mu.Lock()
 	now := time.Now()
 	var acts []Activity
@@ -169,12 +178,12 @@ func (h *Hub) Tick() {
 			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
 			changed = true
 		}
-		if rt.bot.State == "idle" && now.Sub(rt.lastEvent) > quietZzzAfter {
-			rt.bot.State = "zzz"
-			rt.lastEvent = now // mark nap start
+		// Kill lingering invented naps: no gateway/transcript signal for zzz.
+		if rt.bot.State == "zzz" && !rt.gatewayHold {
+			rt.bot.State = "idle"
+			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
 			changed = true
 		}
-		// Stay zzz until a real transcript line. Do not invent walks.
 		if changed {
 			rt.bot.Updated = now
 			acts = append(acts, Activity{
@@ -254,6 +263,26 @@ func (h *Hub) PromptOptimistic(id string) {
 	rt.bot.Y = rt.bot.HomeY
 	rt.bot.Updated = now
 	act := Activity{Type: "state", AgentID: id, State: "talk", Role: rt.bot.LastRole, Bubble: ""}
+	h.mu.Unlock()
+	h.broadcast(act)
+}
+
+// PromptRollback undoes PromptOptimistic when /api/prompt fails (webhook/grok error).
+func (h *Hub) PromptRollback(id string) {
+	h.mu.Lock()
+	rt, ok := h.bots[id]
+	if !ok {
+		h.mu.Unlock()
+		return
+	}
+	now := time.Now()
+	rt.lastEvent = now
+	rt.until = now
+	rt.bot.State = "idle"
+	rt.bot.X = rt.bot.HomeX
+	rt.bot.Y = rt.bot.HomeY
+	rt.bot.Updated = now
+	act := Activity{Type: "state", AgentID: id, State: "idle", Role: rt.bot.LastRole, Bubble: ""}
 	h.mu.Unlock()
 	h.broadcast(act)
 }

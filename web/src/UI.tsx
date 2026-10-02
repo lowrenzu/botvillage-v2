@@ -9,14 +9,15 @@ const ST: Record<string, string> = {
   work: 'Travaille',
   collab: 'Collabore',
   walk: 'Marche',
-  sleep: 'Zzz',
+  sleep: 'Idle',
+  idle: 'Idle',
 }
 const BV: Record<string, string> = {
   idle: 'Idle',
   walk: 'Marche',
   work: 'Travaille',
   talk: 'Discussion',
-  zzz: 'Zzz',
+  zzz: 'Idle',
 }
 const PHASE: Record<PromptPhase, string> = {
   idle: 'Idle',
@@ -33,7 +34,7 @@ const PHASE_HINT: Record<PromptPhase, string> = {
 const KIND_ICON: Record<EvKind, string> = {
   walk: '→',
   work: '◈',
-  zzz: 'z',
+  zzz: '·',
   prompt: '✦',
   talk: '◎',
   other: '·',
@@ -49,7 +50,7 @@ const initial = (name: string) => (name.trim()[0] || '?').toUpperCase()
 function friezeLabel(e: Ev): string {
   const k = e.kind || 'other'
   if (k === 'prompt') return 'Consigne'
-  if (k === 'zzz') return 'Zzz'
+  if (k === 'zzz') return 'Idle'
   if (k === 'walk') return e.tx.startsWith('Rejoint') ? e.tx.replace('Rejoint : ', '→ ') : 'Marche'
   if (k === 'work') return 'Travaille'
   if (k === 'talk') {
@@ -69,16 +70,14 @@ export function UI() {
   const [draft, setDraft] = useState('')
   const [railOpen, setRailOpen] = useState(true)
   const [token, setToken] = useState(promptToken)
-  const mates = a
-    ? agents.filter(o => {
-        if (o === a) return false
-        if (a.partnerId && o.id === a.partnerId) return true
-        return o.room === a.room && !o.path.length && !a.path.length
-      })
+  /* Honest: only transcript/WS talk partner — never invent collab from shared room. */
+  const mates = a && a.partnerId
+    ? agents.filter(o => o.id === a.partnerId)
     : []
-  const working = agents.filter(x => x.state === 'work' || x.bvState === 'work').length
-  const collab = agents.filter(x => x.state === 'collab' || x.bvState === 'talk').length
-  const sleeping = agents.filter(x => x.state === 'sleep' || x.bvState === 'zzz').length
+  /* Counts from live bvState only — never visual anim invented by sim. */
+  const working = agents.filter(x => x.bvState === 'work').length
+  const collab = agents.filter(x => x.bvState === 'talk').length
+  const sleeping = agents.filter(x => x.bvState === 'idle').length
   const live = link === 'live'
   const dayStrip = sessionDayTimeline(36)
   const dayEndRef = useRef<HTMLDivElement>(null)
@@ -146,7 +145,7 @@ export function UI() {
       </div>
 
       {agents.length > 0 && (
-        <div className="roster" role="list">
+        <div className={'roster' + (agents.length > 4 ? ' dense' : '')} role="list">
           {byVotes('agents', agents).map(x => (
             <button
               key={x.id}
@@ -179,10 +178,11 @@ export function UI() {
         </div>
       )}
 
+      <p className="honest-note" title="Les traits bleus entre bots sont une déduction locale (talk/WS), pas une preuve transcript.">Traits bleus = déduction collab</p>
       <div className="day-strip" aria-label="Mini timeline de session">
         <div className="day-strip-head">
           <span className="day-strip-title">Session</span>
-          <span className="day-strip-hint">marche · travail · zzz · consigne · discussion</span>
+          <span className="day-strip-hint">marche · travail · idle · consigne · discussion</span>
         </div>
         <div className="frieze day-frieze" role="list">
           {dayStrip.length === 0 ? (
@@ -296,14 +296,21 @@ export function UI() {
       </div>
         </>
       )}
-    </aside>
+    
+      {ui.toast && ui.toastUntil > performance.now() ? (
+        <div className="toast-stack" role="status" aria-live="polite">
+          <div className="toast ack">{ui.toast}</div>
+        </div>
+      ) : null}
+</aside>
   )
 }
 
 function AgentCard({ a, mates }: { a: Agent; mates: Agent[] }) {
   const withWhom = mates.map(m => m.name).join(', ')
   const title = a.title || a.role || 'Agent'
-  const stateLabel = ST[a.state] || a.state
+  /* Prefer real API/roster bvState for HUD label. */
+  const stateLabel = (BV[a.bvState] || ST[a.state] || a.state)
   return (
     <div className="agent">
       <div className="agent-head">
@@ -326,12 +333,10 @@ function AgentCard({ a, mates }: { a: Agent; mates: Agent[] }) {
           <circle cx="12" cy="10" r="3" />
         </svg>
         <span>
-          {stateLabel}
-          {' · '}
-          <span className="chip">{BV[a.bvState] || a.bvState}</span>
+          <span className="chip">{stateLabel}</span>
           {' · '}
           {a.room.n}
-          {withWhom ? ' · ' + withWhom : ''}
+          {withWhom ? ' · avec ' + withWhom + ' (déduit)' : ''}
         </span>
       </div>
 

@@ -26,6 +26,24 @@ func ExcludeSet() map[string]struct{} {
 	return out
 }
 
+
+// AllowSet reads VILLAGE_ALLOW (comma-separated agent ids).
+// Empty/unset = allow all (DefaultAllowlist). Never commit ids into the repo.
+func AllowSet() map[string]struct{} {
+	raw := strings.TrimSpace(os.Getenv("VILLAGE_ALLOW"))
+	if raw == "" {
+		return DefaultAllowlist
+	}
+	out := make(map[string]struct{})
+	for _, id := range strings.Split(raw, ",") {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			out[id] = struct{}{}
+		}
+	}
+	return out
+}
+
 // Allowed reports whether id is in the allowlist (nil/empty map = allow all)
 // and not in VILLAGE_EXCLUDE.
 func Allowed(id string, allow map[string]struct{}) bool {

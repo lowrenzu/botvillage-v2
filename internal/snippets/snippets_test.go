@@ -53,23 +53,63 @@ func TestGoalWord(t *testing.T) {
 	}
 }
 
-func TestGenericChatterNoLeak(t *testing.T) {
-	secret := "TOP_SECRET_PROMPT_XYZ"
-	line := []byte(`{"role":"user","message":{"content":[{"type":"text","text":"` + secret + `"}]}}`)
-	k, _ := ClassifyLine(line)
-	chatter := GenericChatter(k)
-	if chatter == secret || contains(chatter, "TOP_SECRET") {
-		t.Fatalf("leaked: %q", chatter)
+func TestGenericChatterEmpty(t *testing.T) {
+	for _, k := range []Kind{KindUser, KindTool, KindAssist, KindOther, KindGrowth} {
+		if got := GenericChatter(k); got != "" {
+			t.Fatalf("GenericChatter(%s)=%q want empty", k, got)
+		}
 	}
 }
 
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || (len(s) > 0 && (func() bool {
-		for i := 0; i+len(sub) <= len(s); i++ {
-			if s[i:i+len(sub)] == sub {
-				return true
-			}
-		}
-		return false
-	})()))
+
+func TestSnippetTextAssist(t *testing.T) {
+	line := []byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"Briefing reçu — je confirme."}]}}`)
+	got := SnippetText(line)
+	if got != "Briefing reçu — je confirme." {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestSnippetTextToolUseName(t *testing.T) {
+	line := []byte(`{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Shell"}]}}`)
+	if got := SnippetText(line); got != "Shell" {
+		t.Fatalf("want Shell, got %q", got)
+	}
+}
+
+func TestSnippetTextPrefersProseOverTool(t *testing.T) {
+	line := []byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"Opening files"},{"type":"tool_use","name":"Read"}]}}`)
+	if got := SnippetText(line); got != "Opening files" {
+		t.Fatalf("want prose, got %q", got)
+	}
+}
+
+func TestSnippetTextCaps(t *testing.T) {
+	long := ""
+	for i := 0; i < 100; i++ {
+		long += "a"
+	}
+	line := []byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"` + long + `"}]}}`)
+	got := SnippetText(line)
+	r := []rune(got)
+	if got == "" || len(r) > MaxBubbleRunes {
+		t.Fatalf("bad cap: %q len=%d", got, len(r))
+	}
+	if r[len(r)-1] != '…' {
+		t.Fatalf("expected ellipsis: %q", got)
+	}
+}
+
+func TestSnippetTextHidesSecrets(t *testing.T) {
+	line := []byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"api_key=sk-abcdefghijklmnop"}]}}`)
+	if got := SnippetText(line); got != "" {
+		t.Fatalf("leaked secret snippet: %q", got)
+	}
+}
+
+func TestSnippetTextHidesHiddenPrompt(t *testing.T) {
+	line := []byte(`{"role":"user","message":{"content":[{"type":"text","text":"[SAND_HIDDEN_PROMPT][agent] secret system stuff"}]}}`)
+	if got := SnippetText(line); got != "" {
+		t.Fatalf("leaked hidden prompt: %q", got)
+	}
 }

@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 export type RoomId = 'grok' | 'build' | 'bot' | 'meeting' | 'competences' | 'skills'
 export type BvState = 'idle' | 'walk' | 'work' | 'talk' | 'zzz'
-export type AgentAnim = 'work' | 'collab' | 'walk' | 'sleep'
+export type AgentAnim = 'work' | 'collab' | 'walk' | 'sleep' | 'idle'
 export type PromptPhase = 'idle' | 'sent' | 'acked' | 'silent'
 
 export interface Ev { t: string; a: string; tx: string; c: string; kind?: EvKind }
@@ -99,12 +99,17 @@ export const ui = {
   /** soft camera framing request: set on select / Follow */
   frame: null as { x: number; z: number; az: number; el: number; dist: number } | null,
   hoverAgent: null as Agent | null,
+  /** Real prompt-ack toast (WS activity after sent) — never a timer fake. */
+  toast: '' as string,
+  toastUntil: 0,
 }
 
 export interface SkillJSON { id: string; name: string; source: string }
 export const skillBooks: SkillJSON[] = []
 export const SKILL_DISPLAY_CAP = 55
 export let link: 'off' | 'live' | 'down' = 'off'
+/** True only when server started with --demo; live AGENT_DATA stays honest. */
+export let demoMode = false
 
 let version = 0
 const subs = new Set<() => void>()
@@ -119,7 +124,7 @@ const hm = () => new Date().toTimeString().slice(0, 8)
 function classify(tx: string): EvKind {
   const t = tx.toLowerCase()
   if (t.startsWith('←') || t.includes('consigne') || t.includes('envoyé') || t === '…?' || t === 'hors ligne') return 'prompt'
-  if (t.includes('zzz') || t.includes('dort')) return 'zzz'
+  if (t.includes('zzz') || t.includes('dort')) return 'other'
   if (t.includes('rejoint') || t.includes('déplacement') || t.includes('marche')) return 'walk'
   if (t.includes('parle') || t.includes('discussion') || t.includes('collab')) return 'talk'
   if (t.includes('travaille') || t.includes('tâche')) return 'work'
@@ -160,11 +165,16 @@ const free = (r: Room) => {
   return f.length ? f[Math.floor(Math.random() * f.length)] : null
 }
 
+/** Map live bvState → visual anim. Live: never sleep/zzz pose. */
+function animFromBv(a: Agent): AgentAnim {
+  if (a.path.length) return 'walk'
+  if (a.bvState === 'talk' || a.talkUntil > performance.now()) return 'collab'
+  if (a.bvState === 'work') return 'work'
+  return 'idle'
+}
+
 function arrive(a: Agent) {
-  if (a.bvState === 'zzz') a.state = 'sleep'
-  else if (a.bvState === 'talk' || a.talkUntil > performance.now()) a.state = 'collab'
-  else if (a.bvState === 'idle') a.state = 'work'
-  else a.state = a.room.t === 'meet' ? 'collab' : 'work'
+  a.state = animFromBv(a)
   if ((a.state === 'collab' || a.bvState === 'talk') && facePartner(a)) {
     /* yaw toward talk partner */
   } else {
@@ -345,7 +355,7 @@ function makeAgent(b: BotJSON, index: number): Agent {
     hasAvatar: !!b.hasAvatar,
     home,
     path: [],
-    state: 'work',
+    state: 'idle',
     bvState: (b.state as BvState) || 'idle',
     timer: 4 + Math.random() * 6,
     yaw: slot.f,
@@ -365,7 +375,25 @@ function makeAgent(b: BotJSON, index: number): Agent {
     announcedPartner: null,
   }
   slot.by = a
-  if (a.bvState === 'zzz') a.state = 'sleep'
+  a.state = animFromBv(a)
+  /* Spawn into room matching API state — work never stays at home/lab/servers. */
+  if (a.bvState === 'work' || a.bvState === 'talk' || a.bvState === 'walk') {
+    const target = roomForState(a, a.bvState)
+    if (a.room !== target) {
+      a.slot.by = null
+      const q = free(target) || target.slots[0]
+      q.by = a
+      a.slot = q
+      a.room = target
+      a.x = q.x
+      a.z = q.z
+      a.yaw = q.f
+      a.path = []
+      a.state = animFromBv(a)
+    } else if (a.bvState === 'work') {
+      a.state = 'work'
+    }
+  }
   return a
 }
 
@@ -373,10 +401,12 @@ function releaseSlot(a: Agent) {
   if (a.slot && a.slot.by === a) a.slot.by = null
 }
 
-/** Client allow-list — empty means all agents; the server also allows all AGENT_DATA agents. */
-export const ALLOWED_IDS = new Set<string>([
-  // intentionally empty — server allows all agent-data agents
-])
+/**
+ * Client roster filter (ids). Empty = show everyone the server sent.
+ * Server filter is VILLAGE_ALLOW / VILLAGE_EXCLUDE (see roster.AllowSet).
+ * Filled from /api/health.allowedIds when the server publishes a non-empty list.
+ */
+export const ALLOWED_IDS = new Set<string>()
 
 /** Replace / upsert agents from /api/bots or roster WS. */
 export function syncRoster(bots: BotJSON[]) {
@@ -403,40 +433,53 @@ export function syncRoster(bots: BotJSON[]) {
       a.color = resolveColor(b.color)
       a.hasAvatar = !!b.hasAvatar
       if (b.lastRole) a.role = b.lastRole
-      if (b.state && b.state !== a.bvState) applyBvState(a, b.state as BvState, false)
+      const st = (b.state === 'zzz' ? 'idle' : b.state) as BvState
+      if (st && st !== a.bvState) applyBvState(a, st, false)
+      else if (st) {
+        a.bvState = st
+        /* Re-assert desk/meeting even when state unchanged (fixes stuck-at-home). */
+        if (st === 'work' && a.room.t !== 'desk' && !a.path.length) {
+          applyBvState(a, 'work', false)
+        } else if (st === 'talk' && a.room.id !== 'meeting' && !a.path.length) {
+          applyBvState(a, 'talk', false)
+        } else if (st === 'idle' && a.room.id !== a.home && !a.path.length) {
+          applyBvState(a, 'idle', false)
+        } else {
+          a.state = animFromBv(a)
+        }
+      } else {
+        a.state = animFromBv(a)
+      }
     }
   })
   if (!ui.sel && agents.length) ui.sel = agents[0]
   emit()
 }
 
+function clearBubble(a: Agent) {
+  a.bubble = ''
+  a.bubbleUntil = 0
+}
+
 export function applyBvState(a: Agent, state: BvState, announce = true) {
   const prev = a.bvState
+  /* Live: zzz banned — coerce to idle (no sleep pose / Zzz log). */
+  if (state === 'zzz') state = 'idle'
   a.bvState = state
-  if (state === 'zzz') {
-    a.state = a.path.length ? 'walk' : 'sleep'
-    clearPartner(a)
-    if (announce && prev !== 'zzz') log(a, 'Zzz…')
-    if (a.room.id !== a.home && !a.path.length) go(a, RM[a.home])
-    emit()
-    return
-  }
   if (state === 'idle') {
     clearPartner(a)
+    clearBubble(a)
     if (announce && prev !== 'idle') log(a, 'Idle · ' + a.room.n)
     if (a.room.id !== a.home && !a.path.length) go(a, RM[a.home])
-    else if (!a.path.length) { a.state = 'work'; a.yaw = a.slot.f }
+    else if (!a.path.length) { a.state = 'idle'; a.yaw = a.slot.f }
     emit()
     return
   }
   const target = roomForState(a, state)
   if (state === 'talk') {
     a.talkUntil = Math.max(a.talkUntil, performance.now() + 7000)
+    /* feed = operational status; bubble stays real content only (never invent) */
     if (announce) log(a, a.role ? `Parle · ${a.role}` : 'En discussion')
-    if (!a.bubble || a.bubbleUntil < performance.now()) {
-      a.bubble = '…'
-      a.bubbleUntil = performance.now() + 2800
-    }
     if (a.room !== target) go(a, target)
     else {
       a.state = 'collab'
@@ -445,6 +488,7 @@ export function applyBvState(a: Agent, state: BvState, announce = true) {
   } else if (state === 'work') {
     clearPartner(a)
     if (announce) log(a, 'Travaille' + (a.role ? ` · ${a.role}` : ''))
+    /* do not put status into a.bubble — wait for WS tool name / transcript */
     if (a.room.t !== 'desk') go(a, target)
     else { a.state = 'work' }
   } else if (state === 'walk') {
@@ -454,6 +498,19 @@ export function applyBvState(a: Agent, state: BvState, announce = true) {
   emit()
 }
 
+export function pushToast(msg: string) {
+  ui.toast = msg
+  ui.toastUntil = performance.now() + 3200
+  emit()
+  const until = ui.toastUntil
+  window.setTimeout(() => {
+    if (ui.toastUntil === until) {
+      ui.toast = ''
+      emit()
+    }
+  }, 3300)
+}
+
 export function applyActivity(msg: {
   type?: string; agentId?: string; state?: string; role?: string; bubble?: string
 }) {
@@ -461,19 +518,44 @@ export function applyActivity(msg: {
   const a = agents.find(x => x.id === msg.agentId)
   if (!a) return
   if (msg.role) a.role = msg.role
+  let showedBubble = false
   if (msg.bubble) {
     const raw = String(msg.bubble).trim()
-    log(a, raw)
-    a.bubble = raw.length > 42 ? raw.slice(0, 40) + '…' : raw
-    a.bubbleUntil = performance.now() + 5200
-    a.talkUntil = Math.max(a.talkUntil, performance.now() + 4500)
-    if (a.state !== 'walk' && a.bvState !== 'zzz') a.state = 'collab'
-    if (a.promptPhase === 'sent') a.promptPhase = 'acked'
+    /* reject invented status / filler — bubble = real transcript/action only */
+    const banned = /^(travaille|marche|en discussion|en déplacement|idle|zzz…?|zzz|on it|hey!|got it|listening|mm\?|yo|hmm|collabore|…|\.\.\.)$/i
+    if (raw && !banned.test(raw)) {
+      showedBubble = true
+      log(a, raw)
+      a.bubble = raw.length > 42 ? raw.slice(0, 40) + '…' : raw
+      a.bubbleUntil = performance.now() + 5200
+      const until = a.bubbleUntil
+      window.setTimeout(() => {
+        if (a.bubbleUntil === until) {
+          clearBubble(a)
+          emit()
+        }
+      }, 5300)
+      /* Keep work desk pose — only talk bubbles flip to collab. */
+      if (a.bvState === 'talk') {
+        a.talkUntil = Math.max(a.talkUntil, performance.now() + 4500)
+        if (a.state !== 'walk') a.state = 'collab'
+      } else if (a.bvState === 'work') {
+        if (a.state !== 'walk') a.state = 'work'
+      }
+      if (a.promptPhase === 'sent') {
+        a.promptPhase = 'acked'
+        pushToast(`Ack · ${a.name}`)
+      }
+    }
   }
   if (msg.state) {
-    /* real ack: activity after a sent prompt */
-    if (a.promptPhase === 'sent') a.promptPhase = 'acked'
-    applyBvState(a, msg.state as BvState, !msg.bubble)
+    /* real ack: activity after a sent prompt — never a timer */
+    if (a.promptPhase === 'sent') {
+      a.promptPhase = 'acked'
+      pushToast(`Ack · ${a.name}`)
+    }
+    /* skip status announce when bubble already mirrored real text into feed */
+    applyBvState(a, msg.state as BvState, !showedBubble)
   }
 }
 
@@ -649,24 +731,29 @@ export function step(dt: number) {
       a.state = 'collab'
       /* Keep yaw locked on partner while standing in talk/collab. */
       if (a.partnerId) facePartner(a)
-    } else if (a.state === 'work' || a.state === 'collab') {
-      /* talk branch above already handled bvState==='talk' */
+    } else {
+      /* Force pose from bvState every tick — sleep cannot stick. */
+      if (a.bvState === 'zzz') a.bvState = 'idle'
       if (a.talkUntil && a.talkUntil <= now) {
-        a.state = a.bvState === 'zzz' ? 'sleep' : 'work'
         a.talkUntil = 0
         clearPartner(a)
       }
-      /* ambient desk life: occasional stroll (honest — no fake task %) */
-      a.timer -= dt
-      if (a.timer <= 0) {
-        a.timer = 14 + Math.random() * 22
-        if (a.bvState !== 'zzz' && !a.partnerId && Math.random() < 0.4) {
-          const dest = rooms[Math.floor(Math.random() * rooms.length)]
-          if (dest !== a.room) go(a, dest)
+      a.state = animFromBv(a)
+      /* Live honesty: work must be at a desk — no standing in lab/servers. */
+      if (!demoMode && a.bvState === 'work' && a.room.t !== 'desk') {
+        go(a, roomForState(a, 'work'))
+      }
+      /* Demo-only ambient stroll — live never invents motion. */
+      if (demoMode) {
+        a.timer -= dt
+        if (a.timer <= 0) {
+          a.timer = 14 + Math.random() * 22
+          if (a.bvState !== 'idle' && !a.partnerId && Math.random() < 0.4) {
+            const dest = rooms[Math.floor(Math.random() * rooms.length)]
+            if (dest !== a.room) go(a, dest)
+          }
         }
       }
-    } else if (a.state === 'sleep') {
-      a.timer = Math.max(a.timer, 8)
     }
   }
   resolveMeetups(now)
@@ -678,9 +765,9 @@ export function requestFrame(a: Agent | null, follow = false) {
   ui.frame = {
     x: a.x,
     z: a.z,
-    az: 0.78,
-    el: 0.46,
-    dist: follow ? 14 : 17,
+    az: 0.88,
+    el: 0.42,
+    dist: follow ? 13 : 16,
   }
 }
 
@@ -717,12 +804,7 @@ export async function sendPrompt(prompt: string, target = ''): Promise<boolean> 
   const text = prompt.trim()
   log(a, '← ' + (text.length > 48 ? text.slice(0, 48) + '…' : text))
   a.promptPhase = 'sent'
-  a.bvState = 'talk'
-  a.talkUntil = performance.now() + 5200
-  a.bubble = '…'
-  a.bubbleUntil = performance.now() + 3000
-  a.state = a.path.length ? 'walk' : 'collab'
-  if (a.room.id !== 'meeting' && !a.path.length) go(a, RM.meeting)
+  /* Do NOT invent talk/walk/bubble — wait for gateway isRunning + transcript WS. */
   ui.promptStatus = 'Envoi…'
   emit()
   try {
@@ -761,6 +843,17 @@ export async function sendPrompt(prompt: string, target = ''): Promise<boolean> 
 
 /** Live bridge: roster + activity from botvillage (/api/bots + /ws). */
 export function connectLive() {
+  fetch('/api/health').then(r => r.json()).then(d => {
+    demoMode = !!(d && d.demo)
+    ALLOWED_IDS.clear()
+    if (d && Array.isArray(d.allowedIds)) {
+      for (const id of d.allowedIds) {
+        if (typeof id === 'string' && id) ALLOWED_IDS.add(id)
+      }
+    }
+    emit()
+  }).catch(() => { demoMode = false })
+
   fetch('/api/bots').then(r => r.json()).then(d => {
     if (d && Array.isArray(d.bots)) syncRoster(d.bots)
   }).catch(() => {})

@@ -47,6 +47,18 @@ func TestCheckPromptAuth(t *testing.T) {
 	if !authorized(remote, "secret-token") {
 		t.Fatal("remote header")
 	}
+	t.Setenv("VILLAGE_LOCAL", "1")
+	bare := httptest.NewRequest(http.MethodGet, "/api/bots", nil)
+	bare.RemoteAddr = "203.0.113.8:9"
+	if authorized(bare, "secret-token") {
+		t.Fatal("VILLAGE_LOCAL must not authorize non-loopback without token")
+	}
+	loop := httptest.NewRequest(http.MethodGet, "/api/bots", nil)
+	loop.RemoteAddr = "127.0.0.1:9"
+	if !authorized(loop, "secret-token") {
+		t.Fatal("loopback stays open under VILLAGE_LOCAL")
+	}
+	t.Setenv("VILLAGE_LOCAL", "")
 }
 
 func TestPromptAuthzAndSanitize(t *testing.T) {
@@ -116,7 +128,7 @@ func TestPromptAuthzAndSanitize(t *testing.T) {
 	if _, ok := health["agentData"]; ok {
 		t.Fatal("agentData must be removed from health")
 	}
-	for _, k := range []string{"ok", "demo", "webhook", "bots"} {
+	for _, k := range []string{"ok", "demo", "webhook", "bots", "grokBuild", "allowedIds"} {
 		if _, ok := health[k]; !ok {
 			t.Fatalf("health missing %s", k)
 		}
@@ -154,8 +166,15 @@ func TestResolvePromptTokenEnvWins(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 	t.Setenv("VILLAGE_PROMPT_TOKEN", "")
+	wd, _ := os.Getwd()
+	t.Chdir(t.TempDir())
+	defer t.Chdir(wd)
 	if got := resolvePromptToken(); got != "" {
-		t.Fatalf("webhook key must not become the browser token, got %q", got)
+		t.Fatalf("empty env and no .prompt-token want empty, got %q", got)
+	}
+	_ = os.WriteFile(".prompt-token", []byte("from-file\n"), 0o600)
+	if got := resolvePromptToken(); got != "from-file" {
+		t.Fatalf(".prompt-token fallback got %q", got)
 	}
 	_ = wh
 }

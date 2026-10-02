@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useRef,useState} from 'react'
+import {memo,useEffect,useMemo,useRef,useState} from 'react'
 import {useFrame,useThree} from '@react-three/fiber'
 import {ContactShadows,Html,RoundedBox} from '@react-three/drei'
 import * as THREE from 'three'
@@ -20,7 +20,7 @@ const roomWood=(()=>{const t=wood.clone();t.repeat=new THREE.Vector2(8.4/5,8.4/5
 function Rig(){
  /* camera: overview fits all 6 rooms; viewOffset shifts optical center into left of HUD */
  const {gl,camera,size}=useThree()
- const HOME={az:.62,el:.72,dist:60}
+ const HOME={az:.82,el:.48,dist:46} /* classic ¾ overview */
  const s=useRef({az:HOME.az,el:HOME.el,dist:HOME.dist,distWant:HOME.dist,tgt:new THREE.Vector3(),vaz:0,vel:0,dragging:false,booted:false})
  const want=useMemo(()=>new THREE.Vector3(),[]),camWant=useMemo(()=>new THREE.Vector3(),[])
  useEffect(()=>{const el=gl.domElement,v=s.current;let d=false
@@ -54,28 +54,29 @@ function Rig(){
   /* positive offsetX pans scene left into free pane (negative pushed it under the HUD) */
   if(size.width>720)cam.setViewOffset(size.width,size.height,railW*.55,0,size.width,size.height)
   else cam.clearViewOffset()
-  if(!v.dragging){v.az+=v.vaz*dt;v.el=clamp(v.el+v.vel*dt,.28,1.25)
-   const damp=Math.exp(-dt*1.75);v.vaz*=damp;v.vel*=damp
+  if(!v.dragging){v.az+=v.vaz*dt;v.el=clamp(v.el+v.vel*dt,.28,1.15)
+   /* softer inertia coast after drag */
+   const damp=Math.exp(-dt*1.15);v.vaz*=damp;v.vel*=damp
    if(Math.abs(v.vaz)<1e-4)v.vaz=0;if(Math.abs(v.vel)<1e-4)v.vel=0}
   const fr=ui.frame
-  if(fr){const k=1-Math.exp(-dt*1.05)
+  if(fr){const k=1-Math.exp(-dt*.78) /* slower ease into ¾ frame */
    let daz=fr.az-v.az;daz=Math.atan2(Math.sin(daz),Math.cos(daz))
    v.az+=daz*k;v.el+=(fr.el-v.el)*k
    v.distWant+=(fr.dist-v.distWant)*k
-   const bleed=Math.exp(-dt*7);v.vaz*=bleed;v.vel*=bleed
+   const bleed=Math.exp(-dt*5.5);v.vaz*=bleed;v.vel*=bleed
    if(ui.follow&&ui.sel){fr.x=ui.sel.x;fr.z=ui.sel.z}
    want.set(fr.x,0,fr.z)
   }else{
    want.set(0,0,0)
-   if(ui.follow&&ui.sel){want.set(ui.sel.x,0,ui.sel.z);v.distWant+=(14-v.distWant)*(1-Math.exp(-dt*1.15))}
+   if(ui.follow&&ui.sel){want.set(ui.sel.x,0,ui.sel.z);v.distWant+=(14-v.distWant)*(1-Math.exp(-dt*.95))}
   }
-  v.dist+=(v.distWant-v.dist)*(1-Math.exp(-dt*3.4))
+  v.dist+=(v.distWant-v.dist)*(1-Math.exp(-dt*2.4))
   if(!v.booted){v.booted=true;v.tgt.copy(want);v.dist=v.distWant
    camWant.set(v.tgt.x+v.dist*Math.sin(v.az)*Math.cos(v.el),v.dist*Math.sin(v.el),v.tgt.z+v.dist*Math.cos(v.az)*Math.cos(v.el))
    camera.position.copy(camWant);camera.lookAt(v.tgt);return}
-  v.tgt.lerp(want,1-Math.exp(-dt*1.55))
+  v.tgt.lerp(want,1-Math.exp(-dt*1.15))
   camWant.set(v.tgt.x+v.dist*Math.sin(v.az)*Math.cos(v.el),v.dist*Math.sin(v.el),v.tgt.z+v.dist*Math.cos(v.az)*Math.cos(v.el))
-  camera.position.lerp(camWant,1-Math.exp(-dt*2.15));camera.lookAt(v.tgt)})
+  camera.position.lerp(camWant,1-Math.exp(-dt*1.65));camera.lookAt(v.tgt)})
  return null}
 
 const Box=({p,a,c,e,r=0,ei=1,m=.1,ro=.55,shadow=false}:{p:V3;a:V3;c:string;e?:string;r?:number;ei?:number;m?:number;ro?:number;shadow?:boolean})=>
@@ -104,19 +105,7 @@ const labScr=cvs(256,160,x=>{x.fillStyle='#0c1016';x.fillRect(0,0,256,160)
  for(let i=0;i<10;i++){const h=18+((i*17)%40);x.fillStyle=i%3?'#3a5a78':'#5a7a98';x.fillRect(14+i*22,130-h,16,h)}
  x.strokeStyle='#6a8aaa';x.lineWidth=1.2;x.beginPath();for(let i=0;i<20;i++){const px=14+i*11,py=42-Math.sin(i/2.6)*10;i?x.lineTo(px,py):x.moveTo(px,py)}x.stroke()
  x.fillStyle='rgba(90,180,120,.55)';for(let i=0;i<8;i++)x.fillRect(148+i*12,28,6,4+(i%2)*3)})
-/* single-plane raised tech floor — etched tiles, no coplanar grid meshes */
-const techFloor=cvs(512,512,x=>{
- /* cool slate — sits next to warm wood / corridor gray without black clash */
- x.fillStyle='#2a3138';x.fillRect(0,0,512,512)
- for(let i=0;i<8;i++)for(let j=0;j<8;j++){
-  const px=i*64,py=j*64
-  x.fillStyle=(i+j)%2?'#262d34':'#2e363e';x.fillRect(px+1,py+1,62,62)
-  x.strokeStyle='rgba(140,155,170,.38)';x.lineWidth=1.5;x.strokeRect(px+2,py+2,60,60)
-  x.fillStyle='rgba(160,175,190,.14)';x.fillRect(px+28,py+28,8,8)
- }
- x.strokeStyle='rgba(190,200,212,.22)';x.lineWidth=2;x.strokeRect(4,4,504,504)
-})
-techFloor.wrapS=techFloor.wrapT=THREE.RepeatWrapping;techFloor.repeat.set(1,1)
+/* Compétences uses the shared room-scale parquet; racks stay hi-tech. */
 const Metal=({c='#d3d6da',r=.25}:{c?:string;r?:number})=><meshStandardMaterial color={c} metalness={.9} roughness={r}/>
 const Workstation=({kind}:{kind:keyof typeof scr})=><group>
  <RoundedBox args={[1.5,.012,.62]} radius={.006} position={[0,.9,.42]} receiveShadow><meshStandardMaterial color="#3a3d42" roughness={.85}/></RoundedBox>
@@ -184,26 +173,31 @@ const Doorway=({b}:{b:number})=>{
   </group>
 }
 
-/* floor etch — lower res */
-const etchLabel=(name:string,accent:string)=>{const c=document.createElement('canvas');c.width=512;c.height=128;const x=c.getContext('2d')!
- x.clearRect(0,0,512,128)
- x.fillStyle='rgba(48,46,44,.20)';x.beginPath();x.roundRect(20,20,472,88,12);x.fill()
- x.strokeStyle='rgba(20,18,16,.30)';x.lineWidth=1.5;x.beginPath();x.roundRect(22,22,468,84,11);x.stroke()
- x.strokeStyle='rgba(255,255,255,.12)';x.lineWidth=1;x.beginPath();x.roundRect(24,24,464,80,10);x.stroke()
- x.fillStyle=accent;x.globalAlpha=.8;x.beginPath();x.arc(55,64,5,0,Math.PI*2);x.fill();x.globalAlpha=1
- x.font='600 36px "Plus Jakarta Sans", system-ui, sans-serif'
+/* floor etch — engraved plaque, high-contrast readable from ¾ cam */
+const etchLabel=(name:string,accent:string)=>{const c=document.createElement('canvas');c.width=1024;c.height=256;const x=c.getContext('2d')!
+ x.clearRect(0,0,1024,256)
+ /* recessed plate */
+ x.fillStyle='rgba(36,32,28,.42)';x.beginPath();x.roundRect(28,36,968,184,18);x.fill()
+ x.strokeStyle='rgba(12,10,8,.55)';x.lineWidth=3;x.beginPath();x.roundRect(30,38,964,180,16);x.stroke()
+ x.strokeStyle='rgba(255,248,235,.22)';x.lineWidth=2;x.beginPath();x.roundRect(36,44,952,168,14);x.stroke()
+ /* accent pip */
+ x.fillStyle=accent;x.globalAlpha=.92;x.beginPath();x.arc(96,128,10,0,Math.PI*2);x.fill();x.globalAlpha=1
+ x.fillStyle='rgba(255,255,255,.35)';x.beginPath();x.arc(93,124,3.5,0,Math.PI*2);x.fill()
+ x.font='700 72px "Plus Jakarta Sans", system-ui, sans-serif'
  x.textAlign='center';x.textBaseline='middle'
+ x.letterSpacing='0.08em' as any
  const label=name.toUpperCase()
- x.fillStyle='rgba(18,16,14,.55)';x.fillText(label,257,66)
- x.fillStyle='rgba(230,226,218,.28)';x.fillText(label,255,62)
- x.fillStyle='rgba(42,40,38,.78)';x.fillText(label,256,64)
- const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;t.premultiplyAlpha=true;return t}
+ /* carved shadow + highlight + ink */
+ x.fillStyle='rgba(255,250,240,.35)';x.fillText(label,514,118)
+ x.fillStyle='rgba(8,6,4,.72)';x.fillText(label,510,134)
+ x.fillStyle='rgba(28,24,20,.92)';x.fillText(label,512,126)
+ const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;t.premultiplyAlpha=true;return t}
 const RoomLabel=({r}:{r:Room})=>{
  const map=useMemo(()=>etchLabel(r.n,r.c),[r.n,r.c])
- return <mesh rotation={[-Math.PI/2,0,0]} position={[r.x,.095,r.z]} receiveShadow
+ return <mesh rotation={[-Math.PI/2,0,0]} position={[r.x,.11,r.z]} receiveShadow
   onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel)go(ui.sel,r)}}>
-  <planeGeometry args={[5.2,1.3]}/>
-  <meshStandardMaterial map={map} transparent depthWrite={false} roughness={.92} metalness={.06} polygonOffset polygonOffsetFactor={-1}/>
+  <planeGeometry args={[5.8,1.45]}/>
+  <meshStandardMaterial map={map} transparent depthWrite={false} roughness={.88} metalness={.08} polygonOffset polygonOffsetFactor={-2}/>
  </mesh>}
 
 const initTex=(letter:string)=>{
@@ -576,10 +570,10 @@ function StatusPanel({p,r=0}:{p:V3;r?:number}){
 function LabRoom({r}:{r:Room}){
   const b=r.s
   return <>
-    {/* single raised cool-slate tech floor — no grid overlays / z-fight */}
+    {/* shared room parquet; keep the lab racks and console hi-tech */}
     <mesh rotation={[-Math.PI/2,0,0]} position={[0,.028,0]} receiveShadow>
       <planeGeometry args={[8.4,8.4]}/>
-      <meshStandardMaterial map={techFloor} color="#c8d0d8" roughness={.72} metalness={.12}/>
+      <meshStandardMaterial map={roomWood} color="#d8cfc3" roughness={.58} metalness={0}/>
     </mesh>
     {/* aluminum perimeter strip — ties to Pane posts */}
     <Box p={[0,.04,4.15]} a={[8.4,.035,.1]} c={AL} m={.2} ro={.3}/>
@@ -630,7 +624,7 @@ function RoomView({r}:{r:Room}){
    onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel)go(ui.sel,r)}}>
    <planeGeometry args={[8.2,8.2]}/><meshBasicMaterial transparent opacity={0} depthWrite={false}/>
   </mesh>
-  {/* one floor only — desks+Skills: shared roomWood; Compétences: LabRoom cool tech */}
+  {/* one floor only — every room uses the shared roomWood parquet */}
   {!isLab&&<mesh rotation={[-Math.PI/2,0,0]} position={[0,.022,0]} receiveShadow>
     <planeGeometry args={[8.4,8.4]}/>
     <meshStandardMaterial map={roomWood} color="#d8cfc3" roughness={.58} metalness={0}/>
@@ -655,11 +649,11 @@ function RoomView({r}:{r:Room}){
   {r.t==='lab'&&<LabRoom r={r}/>}
  </group>}
 
-const ST_FR:Record<string,string>={work:'Travaille',collab:'Collabore',walk:'Marche',sleep:'Zzz'}
+const ST_FR:Record<string,string>={work:'Travaille',collab:'Collabore',walk:'Marche',idle:'Idle'}
 /** HUD rail width + margin — tags hide when projected into this strip. */
 const RAIL_PAD=380
 
-function AgentView({a,selected}:{a:Agent;selected:boolean}){
+const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean}){
  const g=useRef<THREE.Group>(null!),body=useRef<THREE.Group>(null!),ring=useRef<THREE.Mesh>(null!)
  const lidL=useRef<THREE.Mesh>(null!),lidR=useRef<THREE.Mesh>(null!)
  const eyeL=useRef<THREE.Mesh>(null!),eyeR=useRef<THREE.Mesh>(null!)
@@ -667,7 +661,7 @@ function AgentView({a,selected}:{a:Agent;selected:boolean}){
  const tagState=useRef<HTMLElement>(null!)
  const bubbleWrap=useRef<HTMLDivElement>(null!)
  const bubbleText=useRef<HTMLDivElement>(null!)
- const lastState=useRef(a.state)
+ const lastState=useRef<string>(a.state)
  const ph=useMemo(()=>Math.random()*6,[])
  const letter=(a.name.trim()[0]||'?').toUpperCase()
  const band=useMemo(()=>initTex(letter),[letter])
@@ -694,46 +688,60 @@ function AgentView({a,selected}:{a:Agent;selected:boolean}){
   g.current.position.set(v.x,0,v.z)
   let d=a.yaw-g.current.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d))
   g.current.rotation.y+=d*(1-Math.exp(-dt*4))
-  const sleep=a.state==='sleep',walking=a.state==='walk',talking=a.state==='collab'&&a.talkUntil>performance.now()
-  const breath=Math.sin(t*(sleep?.85:1.6)+ph)
-  const ty=sleep
-    ? .06+breath*.03
-    : .1+breath*.04+(talking?Math.sin(t*8)*.015:0)+(v.walk*Math.abs(Math.sin(t*9+ph))*.055)
-  const tz=sleep ? .14+Math.sin(t*.65+ph)*.02 : Math.sin(t*1.15+ph)*v.walk*.035
-  const tx=sleep ? .05 : 0
+  /* Live: no sleep/zzz pose — bvState roster only. */
+  if(a.bvState==='zzz') a.bvState='idle'
+  if(a.state==='sleep') a.state=a.path.length?'walk':(a.bvState==='work'?'work':a.bvState==='talk'?'collab':'idle')
+  const walking=a.state==='walk',talking=a.state==='collab'&&a.talkUntil>performance.now()
+  const breath=Math.sin(t*1.6+ph)
+  const ty=.1+breath*.04+(talking?Math.sin(t*8)*.015:0)+(v.walk*Math.abs(Math.sin(t*9+ph))*.055)
+  const tz=Math.sin(t*1.15+ph)*v.walk*.035
+  const tx=0
   const bk=1-Math.exp(-dt*3.2)
   v.by+=(ty-v.by)*bk;v.bz+=(tz-v.bz)*bk;v.bx+=(tx-v.bx)*bk
-  body.current.position.y=v.by;body.current.rotation.z=v.bz;body.current.rotation.x=v.bx
+  /* Desk pose: lean into workstation when bvState=work and standing at desk */
+  const atDeskWork=a.bvState==='work'&&!a.path.length&&a.room.t==='desk'
+  const lean=atDeskWork?0.22:0
+  body.current.position.y=v.by-(atDeskWork?0.12:0);body.current.rotation.z=v.bz;body.current.rotation.x=v.bx+lean
   const twalk=walking?1:0;v.walk+=(twalk-v.walk)*(1-Math.exp(-dt*3))
-  const rate=sleep?.55:1.4+v.walk*2.2
+  const rate=1.4+v.walk*2.2
   const pu=.5+.5*Math.sin(t*rate+ph)
-  ring.current.scale.setScalar(1+pu*(sleep?.025:.08))
-  ;(ring.current.material as THREE.MeshBasicMaterial).opacity=sleep?.12+pu*.08:.5+pu*.3
-  const tlid=sleep?1:0,tdim=sleep?.35:1
-  v.lid+=(tlid-v.lid)*(1-Math.exp(-dt*3.5));v.dim+=(tdim-v.dim)*(1-Math.exp(-dt*3))
+  ring.current.scale.setScalar(1+pu*.08)
+  ;(ring.current.material as THREE.MeshBasicMaterial).opacity=.5+pu*.3
+  v.lid+=(0-v.lid)*(1-Math.exp(-dt*3.5));v.dim+=(1-v.dim)*(1-Math.exp(-dt*3))
   if(lidL.current){lidL.current.scale.y=.02+v.lid*.98;lidL.current.visible=v.lid>.05;lidL.current.position.y=1.05+(.05*v.lid)}
   if(lidR.current){lidR.current.scale.y=.02+v.lid*.98;lidR.current.visible=v.lid>.05;lidR.current.position.y=1.05+(.05*v.lid)}
   if(eyeL.current){(eyeL.current.material as THREE.MeshBasicMaterial).color.setStyle(a.color).multiplyScalar(.55+v.dim*.45)}
   if(eyeR.current){(eyeR.current.material as THREE.MeshBasicMaterial).color.setStyle(a.color).multiplyScalar(.55+v.dim*.45)}
-  /* state label via DOM ref — no React reconcile */
-  if(tagState.current&&a.state!==lastState.current){
-   lastState.current=a.state
-   tagState.current.textContent=ST_FR[a.state]||a.state
+  /* HUD from bvState only — never AgentAnim sleep/Zzz */
+  /* Label = API bvState only — never invent walk from path for HUD */
+  const tagKey=a.bvState==='work'?'work':a.bvState==='talk'?'collab':a.path.length||a.bvState==='walk'?'walk':'idle'
+  if(tagState.current&&tagKey!==lastState.current){
+   lastState.current=tagKey
+   tagState.current.textContent=ST_FR[tagKey]||tagKey
   }
-  /* hide tag when behind right HUD rail (~360px) */
-    if(bubbleWrap.current){
+  /* Speech bubble: expire + class toggle (never React style — emit re-renders were resetting visibility). */
+  if(bubbleWrap.current){
    const on=!!(a.bubble&&a.bubbleUntil>performance.now())
-   bubbleWrap.current.style.visibility=on?'':'hidden'
-   if(on&&bubbleText.current&&bubbleText.current.textContent!==a.bubble)bubbleText.current.textContent=a.bubble
+   if(!on&&a.bubble){a.bubble='';a.bubbleUntil=0}
+   bubbleWrap.current.classList.toggle('is-on', on)
+   if(bubbleText.current){
+    const want=on?(a.bubble||''):''
+    if(bubbleText.current.textContent!==want) bubbleText.current.textContent=want
+   }
   }
   if(tagWrap.current){
    proj.set(v.x,2.05,v.z).project(camera)
-   const sx=(proj.x*.5+.5)*size.width
-   const behind=proj.z>1||sx>size.width-RAIL_PAD
+   /* Prefer always-visible labels; only hide when behind camera frustum */
+   const behind=proj.z>1
    tagWrap.current.style.visibility=behind?'hidden':''
+   if(tagState.current){
+    const want=ST_FR[tagKey]||tagKey
+    if(tagState.current.textContent!==want) tagState.current.textContent=want
+   }
   }
  })
- const showTag=selected||hovered
+ /* ALWAYS show name+state from /api/bots — never gate on select/hover */
+ const showTag=true
  return <group ref={g} scale={1.4}
   onPointerOver={e=>{e.stopPropagation();setHovered(true);ui.hoverAgent=a}}
   onPointerOut={()=>{setHovered(false);if(ui.hoverAgent===a)ui.hoverAgent=null}}>
@@ -772,21 +780,23 @@ function AgentView({a,selected}:{a:Agent;selected:boolean}){
    {avMap&&<mesh position={[0,.52,.5]}><circleGeometry args={[.2,20]}/><meshBasicMaterial map={avMap} toneMapped={false}/></mesh>}
   </group>
   <mesh ref={ring} rotation={[-Math.PI/2,0,0]} position={[0,.04,0]}><ringGeometry args={[.72,selected?.88:.8,32]}/><meshBasicMaterial color={a.color} transparent side={THREE.DoubleSide}/></mesh>
-  <Html position={[0,2.35,0]} center zIndexRange={[30,15]} style={{pointerEvents:'none'}}>
-   <div ref={bubbleWrap} className="speech-bubble" style={{visibility:'hidden'}}>
-    <div ref={bubbleText}>{a.bubble||'…'}</div>
+  {/* Speech bubble (transcript) — same markup/CSS for every agent; show via .is-on from useFrame */}
+  <Html position={[0,2.55,0]} center zIndexRange={[50,40]} style={{pointerEvents:'none'}}>
+   <div ref={bubbleWrap} className="speech-bubble" aria-hidden>
+    <div ref={bubbleText} className="speech-bubble-text"></div>
    </div>
   </Html>
-  {showTag&&<Html position={[0,2.05,0]} center zIndexRange={[20,10]} style={{pointerEvents:'none'}}>
-   <div ref={tagWrap} className={'tag'+(selected?' on':'')}>
+  {/* Nameplate tag — not a speech bubble; always-on status from API bvState */}
+  {showTag&&<Html position={[0,2.05,0]} center zIndexRange={[30,20]} style={{pointerEvents:'none'}}>
+   <div ref={tagWrap} className={'tag always'+(selected?' on':'')+(a.bvState==='work'?' work':'')}>
     <span className="tag-row">
      {a.hasAvatar?<img className="tag-av" src={`/avatars/${a.id}`} alt=""/>:<i className="dot" style={{background:a.color}}/>}
      {a.name}
     </span>
-    <small ref={tagState as any}>{ST_FR[a.state]||a.state}</small>
+    <small ref={tagState as any}>{ST_FR[a.bvState==='work'?'work':a.bvState==='talk'?'collab':a.bvState==='walk'?'walk':'idle']||'Idle'}</small>
    </div>
   </Html>}
- </group>}
+ </group>})
 
 function TalkBeam({a,b}:{a:Agent;b:Agent}){
  const mesh=useRef<THREE.Mesh>(null!)

@@ -173,3 +173,15 @@ func TestExcludeFromEnv(t *testing.T) {
 		t.Fatalf("exclude filter got %+v", out)
 	}
 }
+
+func TestAllowSetFromEnv(t *testing.T) {
+	t.Setenv("VILLAGE_ALLOW", "")
+	if len(AllowSet()) != 0 {
+		t.Fatal("empty VILLAGE_ALLOW must yield empty allow-all map")
+	}
+	t.Setenv("VILLAGE_ALLOW", "aaa, bbb")
+	got := AllowSet()
+	if !Allowed("aaa", got) || !Allowed("bbb", got) || Allowed("ccc", got) {
+		t.Fatalf("AllowSet filter failed: %+v", got)
+	}
+}

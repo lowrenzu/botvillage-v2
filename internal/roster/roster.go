@@ -75,7 +75,7 @@ func (r Root) List() ([]Bot, error) {
 		if name == "assets" || name == "attachments" {
 			continue
 		}
-		if !Allowed(name, DefaultAllowlist) {
+		if !Allowed(name, AllowSet()) {
 			continue
 		}
 		b := r.loadBot(name, idx)
