@@ -482,36 +482,37 @@ html, body, #root {
 
 button { font: inherit; }
 
+/* Mini status chip — same size for every bot. Hover does not grow it. */
 .tag {
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  border-radius: 8px;
-  padding: 1px 5px;
-  font-size: 10px;
-  font-weight: 500;
+  background: rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  padding: 0 4px;
+  font-size: 8px;
+  font-weight: 600;
   line-height: 1.15;
   white-space: nowrap;
   box-shadow: none;
-  color: var(--tx);
+  color: rgba(42, 40, 36, 0.78);
   font-family: var(--font);
   transform: none;
+  pointer-events: none;
 }
 .tag:hover,
 .tag.on {
-  outline: 2px solid rgba(28, 28, 30, 0.18);
-  font-size: 13px;
+  background: rgba(255, 255, 255, 0.38);
+  font-size: 8px;
   font-weight: 600;
-  padding: 5px 10px;
-  border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(80, 70, 60, 0.10), inset 0 1px 1px rgba(255, 255, 255, 0.85);
+  padding: 0 4px;
+  border-radius: 999px;
+  box-shadow: none;
+  outline: none;
 }
-.tag.work small { color: #2f6b4f; font-weight: 700; }
-
-.tag small { color: #3a3e46; display: block; font-size: 10px; font-weight: 600; }
+.tag small { color: inherit; display: block; font-size: 8px; font-weight: 600; line-height: 1.15; }
 .tag:hover small,
-.tag.on small { font-size: 11px; }
+.tag.on small { font-size: 8px; }
 .dot, .rl i {
   display: inline-block;
   width: 7px; height: 7px;
@@ -861,8 +862,7 @@ button { font: inherit; }
 .frieze-chip.kind-talk b { color: #3d7ab8; }
 
 /* Speech bubble = transcript-only, ONE chip for every bot.
-   Compact pill (bot-scale), not a card. Hover/pointer expands the line.
-   Work pulses. Idle fades. No comic tail. */
+   Compact 1-line pill, same chip for work and talk. Idle opacity 0. No comic tail. */
 .speech-bubble-html {
   width: max-content;
   max-width: 220px;
@@ -936,34 +936,14 @@ button { font: inherit; }
   pointer-events: none;
   animation: none;
 }
-/* Work: subtle rim pulse, still the same chip. */
-.speech-bubble.is-on.is-work {
-  animation: sb-pulse 1.7s ease-in-out infinite;
-}
+/* Work and talk share this chip — no second size, no pulse. */
+.speech-bubble.is-on.is-work { animation: sb-float 2.6s ease-in-out infinite; }
 .speech-bubble.is-on:hover,
-.speech-bubble.is-on.is-hot,
-.speech-bubble.is-on.is-idle.is-hot {
-  opacity: 1;
-  visibility: visible;
-  filter: none;
-  pointer-events: auto;
-  max-width: 220px;
-  padding: 7px 12px 7px 10px;
-  border-radius: 16px;
-  transform: translate3d(0, -2px, 0) scale(1);
-  animation: none;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.32) inset,
-    0 8px 20px rgba(16, 14, 12, 0.26);
-  transition:
-    opacity 180ms var(--sb-out),
-    transform 200ms var(--sb-out),
-    max-width 240ms var(--sb-out),
-    padding 200ms var(--sb-out),
-    border-radius 200ms var(--sb-out),
-    filter 160ms var(--sb-out),
-    box-shadow 200ms var(--sb-out),
-    visibility 0s linear 0s;
+.speech-bubble.is-on.is-hot {
+  max-width: 64px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  font-size: 13px;
 }
 .speech-bubble::before {
   content: "";
@@ -973,10 +953,6 @@ button { font: inherit; }
   flex: 0 0 5px;
   background: rgba(255, 252, 248, 0.78);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.10);
-}
-.speech-bubble.is-work::before {
-  background: rgba(226, 236, 224, 0.95);
-  animation: sb-dot 1.7s ease-in-out infinite;
 }
 .speech-bubble-text {
   min-width: 0;
@@ -990,15 +966,8 @@ button { font: inherit; }
 .speech-bubble-text:empty { display: none; }
 .speech-bubble:hover .speech-bubble-text,
 .speech-bubble.is-hot .speech-bubble-text {
-  max-width: 188px;
-  white-space: normal;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(180deg, #000 68%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 68%, transparent 100%);
+  max-width: 42px;
+  white-space: nowrap;
 }
 @keyframes sb-float {
   0%, 100% { translate: 0 0; }
@@ -1032,8 +1001,6 @@ button { font: inherit; }
 img.av, img.agent-av { object-fit: cover; display: block; padding: 0; border: 0; }
 img.av { width: 26px; height: 26px; border-radius: 50%; }
 img.agent-av { width: 36px; height: 36px; border-radius: 12px; }
-.tag-row { display: inline-flex; align-items: center; gap: 6px; }
-.tag-av { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; display: inline-block; margin-right: 2px; }
 
 
 /* P2: mobile / compact rail toggle */

@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import {ui,selectAgent,CLICK_MOVE_MAX,type Agent} from '../sim'
 import { initTex } from './labels'
 
-const ST_FR:Record<string,string>={work:'Travaille',collab:'Discussion · déduit',walk:'Marche',idle:'Idle'}
+const ST_FR:Record<string,string>={work:'Travail',collab:'Parle',walk:'Marche',idle:'Idle'}
 /** HUD rail width + margin — tags hide when projected into this strip. */
 const RAIL_PAD=380
 
@@ -103,7 +103,7 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
    }
   }
  })
- /* ALWAYS show name+state from /api/bots — never gate on select/hover */
+ /* Always-on status word only — never name, never avatar. */
  const showTag=true
  return <group ref={g} scale={1.4}
   onPointerOver={e=>{e.stopPropagation();hot.current=true;ui.hoverAgent=a}}
@@ -149,13 +149,9 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
     <div ref={bubbleText} className="speech-bubble-text"></div>
    </div>
   </Html>
-  {/* Nameplate tag — not a speech bubble; always-on status from API bvState */}
+  {/* Status chip — identical markup for every bot. One short state word. No name, no avatar. */}
   {showTag&&<Html position={[0,2.05,0]} center zIndexRange={[30,20]} style={{pointerEvents:'none'}}>
-   <div ref={tagWrap} className={'tag'+(selected?' on':'')+(a.bvState==='work'?' work':'')}>
-    <span className="tag-row">
-     {a.hasAvatar?<img className="tag-av" src={`/avatars/${a.id}`} alt=""/>:<i className="dot" style={{background:a.color}}/>}
-     {a.name}
-    </span>
+   <div ref={tagWrap} className="tag">
     <small ref={tagState as any}>{ST_FR[a.bvState==='work'?'work':a.bvState==='talk'?'collab':a.bvState==='walk'?'walk':'idle']||'Idle'}</small>
    </div>
   </Html>}
