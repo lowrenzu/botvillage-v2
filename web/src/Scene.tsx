@@ -24,7 +24,7 @@ export function Scene(){
  {[-2,2].map(z=><Box key={z} p={[0,.022,z]} a={[38,.01,.04]} c="#b4b7bc" m={.15} ro={.3}/>)}
  <ContactShadows position={[0,0.02,0]} opacity={0.28} scale={36} blur={2.6} far={6} color="#2a2620"/>
  {rooms.map(r=><RoomView key={r.id} r={r}/>)}{rooms.map(r=><RoomLabel key={r.id+"-lbl"} r={r}/>)}
- {agents.map(a=><AgentView key={a.id} a={a} selected={ui.sel===a}/>)}
+ {agents.map(a=><AgentView key={a.id} a={a} selected={ui.sel===a} bvState={a.bvState}/>)}
  <TalkBeams/>
  <Rig/><Tick/></>}
 

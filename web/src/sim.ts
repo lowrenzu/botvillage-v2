@@ -4,6 +4,13 @@ export { voteOf, castVote, byVotes }
 
 export type RoomId = 'grok' | 'build' | 'bot' | 'meeting' | 'competences' | 'skills'
 export type BvState = 'idle' | 'walk' | 'work' | 'talk' | 'zzz'
+
+/** Roster/WS state → bvState. zzz is not a live pose. hasTranscript is irrelevant. */
+export function canonBv(s?: string): BvState {
+  const v = (s || '').trim().toLowerCase()
+  if (v === 'work' || v === 'talk' || v === 'walk') return v
+  return 'idle'
+}
 export type AgentAnim = 'work' | 'collab' | 'walk' | 'sleep' | 'idle'
 export type PromptPhase = 'idle' | 'sent' | 'acked' | 'silent'
 
@@ -363,7 +370,7 @@ function makeAgent(b: BotJSON, index: number): Agent {
     home,
     path: [],
     state: 'idle',
-    bvState: (b.state as BvState) || 'idle',
+    bvState: canonBv(b.state),
     timer: 4 + Math.random() * 6,
     yaw: slot.f,
     x: slot.x,
@@ -442,9 +449,10 @@ export function syncRoster(bots: BotJSON[]) {
       a.hasAvatar = !!b.hasAvatar
       a.hasTranscript = !!b.hasTranscript
       if (b.lastRole) a.role = b.lastRole
-      const st = (b.state === 'zzz' ? 'idle' : b.state) as BvState
-      if (st && st !== a.bvState) applyBvState(a, st, false)
-      else if (st) {
+      /* hasTranscript never gates bvState — tag reads API state only. */
+      const st = canonBv(b.state)
+      if (st !== a.bvState) applyBvState(a, st, false)
+      else {
         a.bvState = st
         /* Re-assert desk/meeting even when state unchanged (fixes stuck-at-home). */
         if (st === 'work' && a.room.t !== 'desk' && !a.path.length) {
@@ -456,8 +464,6 @@ export function syncRoster(bots: BotJSON[]) {
         } else {
           a.state = animFromBv(a)
         }
-      } else {
-        a.state = animFromBv(a)
       }
     }
   })
@@ -569,7 +575,7 @@ export function applyActivity(msg: {
       pushToast(`Ack · ${a.name}`)
     }
     /* skip status announce when bubble already mirrored real text into feed */
-    applyBvState(a, msg.state as BvState, !showedBubble)
+    applyBvState(a, canonBv(msg.state), !showedBubble)
   }
 }
 
@@ -869,9 +875,13 @@ export function connectLive() {
     emit()
   }).catch(() => { demoMode = false })
 
-  fetch('/api/bots').then(r => r.json()).then(d => {
-    if (d && Array.isArray(d.bots)) syncRoster(d.bots)
-  }).catch(() => {})
+  const pullBots = () => {
+    fetch('/api/bots').then(r => r.json()).then(d => {
+      if (d && Array.isArray(d.bots)) syncRoster(d.bots)
+    }).catch(() => {})
+  }
+  pullBots()
+  const poll = window.setInterval(pullBots, 2000)
 
   fetch('/api/skills').then(r => r.json()).then(d => {
     skillBooks.length = 0
@@ -904,6 +914,7 @@ export function connectLive() {
   }
   open()
   return () => {
+    window.clearInterval(poll)
     if (timer) clearTimeout(timer)
     ws?.close()
   }

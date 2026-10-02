@@ -172,11 +172,25 @@ func (h *Hub) Tick() {
 	var acts []Activity
 	for id, rt := range h.bots {
 		changed := false
-		if !rt.until.IsZero() && now.After(rt.until) {
+		// Gateway isRunning wins over an expired transcript hold.
+		// A failed poll must not flash Idle while gatewayHold is still set.
+		if rt.gatewayHold {
+			if rt.until.IsZero() || !rt.until.After(now) {
+				rt.until = now.Add(liveWorkHold)
+			}
+			if rt.bot.State != "work" {
+				rt.bot.State = "work"
+				rt.bot.X = rt.bot.HomeX + 18
+				rt.bot.Y = rt.bot.HomeY - 8
+				changed = true
+			}
+		} else if !rt.until.IsZero() && now.After(rt.until) {
 			rt.until = time.Time{}
-			rt.bot.State = "idle"
-			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
-			changed = true
+			if rt.bot.State != "idle" {
+				rt.bot.State = "idle"
+				rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
+				changed = true
+			}
 		}
 		// Kill lingering invented naps: no gateway/transcript signal for zzz.
 		if rt.bot.State == "zzz" && !rt.gatewayHold {

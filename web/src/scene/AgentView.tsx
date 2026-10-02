@@ -2,14 +2,17 @@ import {memo,useEffect,useMemo,useRef,useState} from 'react'
 import {useFrame} from '@react-three/fiber'
 import {Html} from '@react-three/drei'
 import * as THREE from 'three'
-import {ui,selectAgent,CLICK_MOVE_MAX,type Agent} from '../sim'
+import {ui,selectAgent,CLICK_MOVE_MAX,type Agent,type BvState} from '../sim'
 import { initTex } from './labels'
 
-const ST_FR:Record<string,string>={work:'Travail',collab:'Parle',walk:'Marche',idle:'Idle'}
+/** Scene tag from API bvState only: work→Travail, talk→Parle, walk→Marche, else Idle. */
+export function bvTagLabel(bv: string): string {
+ return bv === 'work' ? 'Travail' : bv === 'talk' ? 'Parle' : bv === 'walk' ? 'Marche' : 'Idle'
+}
 /** HUD rail width + margin — tags hide when projected into this strip. */
 const RAIL_PAD=380
 
-const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean}){
+const AgentView=memo(function AgentView({a,selected,bvState}:{a:Agent;selected:boolean;bvState:BvState}){
  const g=useRef<THREE.Group>(null!),body=useRef<THREE.Group>(null!),ring=useRef<THREE.Mesh>(null!)
  const lidL=useRef<THREE.Mesh>(null!),lidR=useRef<THREE.Mesh>(null!)
  const eyeL=useRef<THREE.Mesh>(null!),eyeR=useRef<THREE.Mesh>(null!)
@@ -17,7 +20,7 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
  const tagState=useRef<HTMLElement>(null!)
  const bubbleWrap=useRef<HTMLDivElement>(null!)
  const bubbleText=useRef<HTMLDivElement>(null!)
- const lastState=useRef<string>(a.state)
+ const lastState=useRef<string>(a.bvState)
  const ph=useMemo(()=>Math.random()*6,[])
  const letter=(a.name.trim()[0]||'?').toUpperCase()
  const band=useMemo(()=>initTex(letter),[letter])
@@ -68,13 +71,12 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
   if(lidR.current){lidR.current.scale.y=.02+v.lid*.98;lidR.current.visible=v.lid>.05;lidR.current.position.y=1.05+(.05*v.lid)}
   if(eyeL.current){(eyeL.current.material as THREE.MeshBasicMaterial).color.setStyle(a.color).multiplyScalar(.55+v.dim*.45)}
   if(eyeR.current){(eyeR.current.material as THREE.MeshBasicMaterial).color.setStyle(a.color).multiplyScalar(.55+v.dim*.45)}
-  /* HUD from bvState only — never AgentAnim sleep/Zzz */
-  /* Label = API bvState only — never invent walk from path for HUD */
-  const tagKey=a.bvState==='work'?'work':a.bvState==='talk'?'collab':a.path.length||a.bvState==='walk'?'walk':'idle'
-  if(tagState.current&&tagKey!==lastState.current){
-   lastState.current=tagKey
-   tagState.current.textContent=ST_FR[tagKey]||tagKey
-  }
+  /* Label = live a.bvState every frame. Path/anim must not paint Idle over work. */
+  const label=bvTagLabel(a.bvState)
+  if(lastState.current!==a.bvState) lastState.current=a.bvState
+  let tagNode: HTMLElement|null=tagState.current
+  if(!tagNode||!tagNode.isConnected) tagNode=document.getElementById('bvtag-'+a.id)
+  if(tagNode&&tagNode.textContent!==label) tagNode.textContent=label
   /* Speech bubble: class toggle only — keep last text while CSS fade/slide exits (don't wipe textContent on off). */
   /* Chip, not a card: live transcript only. Idle fades. Work pulses. Pointer sets is-hot. */
   if(bubbleWrap.current){
@@ -97,10 +99,7 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
    /* Prefer always-visible labels; only hide when behind camera frustum */
    const behind=proj.z>1
    tagWrap.current.style.visibility=behind?'hidden':''
-   if(tagState.current){
-    const want=ST_FR[tagKey]||tagKey
-    if(tagState.current.textContent!==want) tagState.current.textContent=want
-   }
+   if(tagNode&&tagNode.textContent!==label) tagNode.textContent=label
   }
  })
  /* Always-on status word only — never name, never avatar. */
@@ -152,7 +151,7 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
   {/* Status chip — identical markup for every bot. One short state word. No name, no avatar. */}
   {showTag&&<Html position={[0,2.05,0]} center zIndexRange={[30,20]} style={{pointerEvents:'none'}}>
    <div ref={tagWrap} className="tag">
-    <small ref={tagState as any}>{ST_FR[a.bvState==='work'?'work':a.bvState==='talk'?'collab':a.bvState==='walk'?'walk':'idle']||'Idle'}</small>
+    <small id={'bvtag-'+a.id} ref={tagState as any}>{bvTagLabel(bvState)}</small>
    </div>
   </Html>}
  </group>})
