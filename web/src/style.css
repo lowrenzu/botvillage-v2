@@ -867,72 +867,106 @@ button { font: inherit; }
 }
 .frieze-chip.kind-talk b { color: #3d7ab8; }
 
-/* Speech bubble = real transcript only. Hidden by default; .is-on from useFrame (same chrome for every agent). */
+/* Speech bubble = transcript-only, ONE chrome for every bot.
+   Soft charcoal glass (matches Elon soft charcoal) — not flat white / not neon. */
 .speech-bubble-html {
-  /* Keep drei's Html anchor from collapsing the content to a 1ch column. */
   width: max-content;
-  max-width: 248px;
+  max-width: 236px;
   flex: 0 0 auto;
   pointer-events: none;
 }
 .speech-bubble {
+  --sb-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --sb-ease-in: cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   display: inline-block;
   width: max-content;
-  min-width: 64px;
-  max-width: 248px;
+  min-width: 72px;
+  max-width: 236px;
   box-sizing: border-box;
-  padding: 9px 14px 10px;
-  border-radius: 14px;
-  /* frosted glass — premium, not flat grey / not neon */
-  background: linear-gradient(165deg, rgba(255, 252, 248, 0.92) 0%, rgba(245, 242, 236, 0.88) 100%) !important;
-  backdrop-filter: blur(14px) saturate(1.15);
-  -webkit-backdrop-filter: blur(14px) saturate(1.15);
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  padding: 11px 15px 12px;
+  border-radius: 16px 16px 16px 16px;
+  /* soft charcoal frosted — premium depth */
+  background:
+    linear-gradient(155deg,
+      rgba(58, 54, 50, 0.94) 0%,
+      rgba(36, 33, 30, 0.92) 55%,
+      rgba(28, 26, 24, 0.94) 100%) !important;
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid rgba(255, 250, 242, 0.14);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.85) inset,
-    0 8px 28px rgba(18, 16, 14, 0.18),
-    0 2px 6px rgba(18, 16, 14, 0.08);
-  color: #1e2228 !important;
-  font: 600 12.5px/1.4 "Plus Jakarta Sans", system-ui, sans-serif;
-  letter-spacing: -0.01em;
+    0 1px 0 rgba(255, 252, 245, 0.14) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.35) inset,
+    0 14px 36px rgba(12, 10, 8, 0.42),
+    0 4px 10px rgba(12, 10, 8, 0.22);
+  color: rgba(255, 252, 245, 0.96) !important;
+  font: 600 12.5px/1.45 "Plus Jakarta Sans", system-ui, sans-serif;
+  letter-spacing: -0.015em;
   text-align: left;
   writing-mode: horizontal-tb;
   white-space: normal;
   overflow-wrap: anywhere;
-  word-wrap: break-word;
   word-break: break-word;
   pointer-events: none;
-  transform: translateY(4px) scale(0.97);
+  /* enter/exit rest: below + faded */
+  transform: translate3d(0, 12px, 0) scale(0.94);
   visibility: hidden;
   opacity: 0;
-  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+  filter: blur(2px);
+  transition:
+    opacity 0.34s var(--sb-ease-in),
+    transform 0.38s var(--sb-ease-in),
+    filter 0.34s var(--sb-ease-in),
+    visibility 0s linear 0.38s;
+  will-change: opacity, transform, filter;
 }
 .speech-bubble.is-on {
   visibility: visible;
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translate3d(0, 0, 0) scale(1);
+  filter: blur(0);
+  transition:
+    opacity 0.32s var(--sb-ease-out),
+    transform 0.4s var(--sb-ease-out),
+    filter 0.28s var(--sb-ease-out),
+    visibility 0s linear 0s;
 }
 .speech-bubble-text {
-  display: block;
-  max-width: 220px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 206px;
+  max-height: 4.35em; /* 3 lines fallback */
 }
 .speech-bubble-text:empty { display: none; }
-/* refined soft pointer — shared for all bots */
+/* soft charcoal pointer — shared chrome */
+.speech-bubble::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 252, 245, 0.08) 0%, transparent 42%);
+  opacity: 0.9;
+}
 .speech-bubble::after {
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -5px;
-  width: 10px;
-  height: 10px;
-  margin-left: -5px;
-  background: rgba(248, 245, 240, 0.9) !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.55);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.55);
-  box-shadow: 2px 2px 6px rgba(18, 16, 14, 0.08);
+  bottom: -6px;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  background: rgba(36, 33, 30, 0.94) !important;
+  border-right: 1px solid rgba(255, 250, 242, 0.12);
+  border-bottom: 1px solid rgba(255, 250, 242, 0.12);
+  box-shadow: 2px 3px 8px rgba(12, 10, 8, 0.28);
   transform: rotate(45deg);
-  border-radius: 1px;
+  border-radius: 2px;
 }
 
 

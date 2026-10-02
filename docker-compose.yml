@@ -13,11 +13,11 @@ services:
       - "127.0.0.1:8040:8040"
     environment:
       AGENT_DATA: /data
-      # VILLAGE_LOCAL no longer bypasses non-loopback auth (Docker bridge IPs need a token).
-      # Host publish stays 127.0.0.1; set a HUD jeton so the browser can pass the gate.
+      # VILLAGE_LOCAL=1: no token gate for remotes (dev/trust LAN). Host publish stays 127.0.0.1.
       VILLAGE_LOCAL: "1"
       # VILLAGE_WS_ORIGINS: "http://my-box.tailnet.ts.net:8040"
-      # VILLAGE_PROMPT_TOKEN: "set-me"   # required for non-loopback peers; never the webhook key
+      # VILLAGE_PROMPT_TOKEN: "set-me"   # only needed if VILLAGE_LOCAL is off; never the webhook key
+      # XAI_API_KEY / mount xai.json if you use Grok Build
     volumes:
       # Host path → container /data (set AGENT_DATA env when invoking compose)
       - ${AGENT_DATA:-./agent-data}:/data:ro

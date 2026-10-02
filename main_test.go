@@ -398,3 +398,21 @@ func TestPersistentSessionsRoundTripAndPrune(t *testing.T) {
 		t.Fatal("expired session remained on disk")
 	}
 }
+
+func TestAppendGrokLine(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "transcript.jsonl")
+	if err := appendGrokLine(path, "hello from grok"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "hello from grok") {
+		t.Fatalf("missing content: %s", b)
+	}
+	if err := appendGrokLine("", "noop"); err != nil {
+		t.Fatal("empty path should be nil")
+	}
+}

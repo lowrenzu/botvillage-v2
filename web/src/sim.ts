@@ -539,15 +539,16 @@ export function applyActivity(msg: {
     if (raw && !banned.test(raw)) {
       showedBubble = true
       log(a, raw)
-      a.bubble = raw.length > 42 ? raw.slice(0, 40) + '…' : raw
-      a.bubbleUntil = performance.now() + 5200
+      /* CSS line-clamp handles multi-line; hard cap keeps DOM light */
+      a.bubble = raw.length > 96 ? raw.slice(0, 94) + '…' : raw
+      a.bubbleUntil = performance.now() + 5600
       const until = a.bubbleUntil
       window.setTimeout(() => {
         if (a.bubbleUntil === until) {
           clearBubble(a)
           emit()
         }
-      }, 5300)
+      }, 5700)
       /* Keep work desk pose — only talk bubbles flip to collab. */
       if (a.bvState === 'talk') {
         a.talkUntil = Math.max(a.talkUntil, performance.now() + 4500)

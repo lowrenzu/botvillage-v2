@@ -247,3 +247,23 @@ func (r Root) Exists(id string) bool {
 	st, err := os.Stat(filepath.Join(r.AgentsDir(), id))
 	return err == nil && st.IsDir()
 }
+
+// EnsureTranscriptPath returns an existing transcript path, or creates
+// agents/{id}/transcript.jsonl so Grok Build replies have somewhere to land.
+// Returns "" for invalid / unknown agents.
+func (r Root) EnsureTranscriptPath(id string) string {
+	id = SanitizeID(id)
+	if id == "" || !r.Exists(id) {
+		return ""
+	}
+	if p := r.findTranscript(id); p != "" {
+		return p
+	}
+	p := filepath.Join(r.AgentsDir(), id, "transcript.jsonl")
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return ""
+	}
+	_ = f.Close()
+	return p
+}

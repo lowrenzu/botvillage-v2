@@ -75,13 +75,13 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
    lastState.current=tagKey
    tagState.current.textContent=ST_FR[tagKey]||tagKey
   }
-  /* Speech bubble: expire + class toggle (never React style — emit re-renders were resetting visibility). */
+  /* Speech bubble: class toggle only — keep last text while CSS fade/slide exits (don't wipe textContent on off). */
   if(bubbleWrap.current){
    const on=!!(a.bubble&&a.bubbleUntil>performance.now())
    if(!on&&a.bubble){a.bubble='';a.bubbleUntil=0}
    bubbleWrap.current.classList.toggle('is-on', on)
-   if(bubbleText.current){
-    const want=on?(a.bubble||''):''
+   if(on&&bubbleText.current){
+    const want=a.bubble||''
     if(bubbleText.current.textContent!==want) bubbleText.current.textContent=want
    }
   }

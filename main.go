@@ -392,7 +392,10 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 				writePromptResult(w, 502, err.Error(), err)
 				return
 			}
-			if err := appendGrokLine(d.rroot.TranscriptPath(body.ID), text); err != nil {
+			path := d.rroot.EnsureTranscriptPath(body.ID)
+			if path == "" {
+				log.Printf("grok transcript append id=%s: no writable path", body.ID)
+			} else if err := appendGrokLine(path, text); err != nil {
 				log.Printf("grok transcript append id=%s: %v", body.ID, err)
 			}
 			writePromptResult(w, 200, truncate(text, 400), nil)
@@ -466,7 +469,7 @@ func appendGrokLine(path, text string) error {
 		return nil
 	}
 	line, _ := json.Marshal(map[string]string{"role": "assistant", "content": truncate(text, 500)})
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}

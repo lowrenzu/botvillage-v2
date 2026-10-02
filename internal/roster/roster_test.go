@@ -217,3 +217,28 @@ func TestHasTranscriptNonempty(t *testing.T) {
 		t.Fatalf("missing want false: %v", got)
 	}
 }
+
+func TestEnsureTranscriptPath(t *testing.T) {
+	root := t.TempDir()
+	id := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	if err := os.MkdirAll(filepath.Join(root, "agents", id), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := Root{AgentData: root}
+	if p := r.TranscriptPath(id); p != "" {
+		t.Fatalf("expected empty before ensure, got %q", p)
+	}
+	p := r.EnsureTranscriptPath(id)
+	if p == "" {
+		t.Fatal("EnsureTranscriptPath returned empty")
+	}
+	if _, err := os.Stat(p); err != nil {
+		t.Fatalf("file not created: %v", err)
+	}
+	if again := r.EnsureTranscriptPath(id); again != p {
+		t.Fatalf("second ensure %q != %q", again, p)
+	}
+	if r.EnsureTranscriptPath("not-a-uuid") != "" {
+		t.Fatal("invalid id must be empty")
+	}
+}
