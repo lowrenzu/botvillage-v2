@@ -468,7 +468,24 @@ func appendGrokLine(path, text string) error {
 	if path == "" {
 		return nil
 	}
-	line, _ := json.Marshal(map[string]string{"role": "assistant", "content": truncate(text, 500)})
+	// Same shape as live transcripts: role + message.content[].text.
+	// A bare top-level "content" string is classified as assistant but
+	// SnippetText returns "" so the real reply never becomes a bubble.
+	text = strings.TrimSpace(text)
+	if rs := []rune(text); len(rs) > 500 {
+		text = string(rs[:500]) + "…"
+	}
+	line, err := json.Marshal(map[string]any{
+		"role": "assistant",
+		"message": map[string]any{
+			"content": []map[string]string{
+				{"type": "text", "text": text},
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err

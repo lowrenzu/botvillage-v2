@@ -13,6 +13,7 @@ import (
 
 	"botvillage/internal/hub"
 	"botvillage/internal/roster"
+	"botvillage/internal/snippets"
 	"botvillage/internal/webhook"
 )
 
@@ -411,6 +412,26 @@ func TestAppendGrokLine(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "hello from grok") {
 		t.Fatalf("missing content: %s", b)
+	}
+	line := bytes.TrimSpace(bytes.Split(b, []byte("\n"))[0])
+	if got := snippets.SnippetText(line); got != "hello from grok" {
+		t.Fatalf("bubble extractor missed reply: %q from %s", got, line)
+	}
+	kind, role := snippets.ClassifyLine(line)
+	if kind != snippets.KindAssist || role != "assistant" {
+		t.Fatalf("classify got %s %s", kind, role)
+	}
+	// accents must survive rune cap and still extract
+	path2 := filepath.Join(dir, "t2.jsonl")
+	if err := appendGrokLine(path2, "Réponse — "+strings.Repeat("é", 600)); err != nil {
+		t.Fatal(err)
+	}
+	b2, err := os.ReadFile(path2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := snippets.SnippetText(bytes.TrimSpace(b2)); got == "" || !strings.HasPrefix(got, "Réponse") {
+		t.Fatalf("long reply not extractable: %q", got)
 	}
 	if err := appendGrokLine("", "noop"); err != nil {
 		t.Fatal("empty path should be nil")
