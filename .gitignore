@@ -18,3 +18,4 @@ web/dist/
 *.swp
 .env
 .env.*
+xai.json

@@ -711,7 +711,7 @@ export function setPromptToken(v: string) {
   } catch { /* private mode */ }
 }
 
-export async function sendPrompt(prompt: string): Promise<boolean> {
+export async function sendPrompt(prompt: string, target = ''): Promise<boolean> {
   const a = ui.sel
   if (!a || !prompt.trim()) return false
   const text = prompt.trim()
@@ -732,7 +732,7 @@ export async function sendPrompt(prompt: string): Promise<boolean> {
     const res = await fetch('/api/prompt', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ id: a.id, name: a.name, prompt: text }),
+      body: JSON.stringify({ id: a.id, name: a.name, prompt: text, target }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.ok === false) {

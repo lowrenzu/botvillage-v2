@@ -24,6 +24,7 @@ import (
 	"botvillage/internal/roster"
 	"botvillage/internal/tail"
 	"botvillage/internal/skills"
+	"botvillage/internal/grokbuild"
 	"botvillage/internal/webhook"
 )
 
@@ -110,6 +111,7 @@ func main() {
 
 	wh := webhook.New(webhookPath, wakesPath)
 	_ = wh.Load()
+	gb := grokbuild.FromEnv(xaiPath())
 	wh.EnsureWakesPerms()
 
 	promptTok := resolvePromptToken()
@@ -125,6 +127,7 @@ func main() {
 		rroot:     rroot,
 		h:         h,
 		wh:        wh,
+		grok:      gb,
 		promptTok: promptTok,
 		limiter:   newPromptLimiter(12),
 		static:    staticFS,
@@ -157,6 +160,7 @@ type routeDeps struct {
 	rroot     roster.Root
 	h         *hub.Hub
 	wh        *webhook.Client
+	grok      grokbuild.Client
 	promptTok string
 	limiter   *promptLimiter
 	static    embed.FS
@@ -328,6 +332,7 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 			Name   string `json:"name"`
 			Prompt string `json:"prompt"`
 			Action string `json:"action"`
+			Target string `json:"target"`
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -364,6 +369,16 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 			return
 		}
 		d.h.PromptOptimistic(body.ID)
+		if body.Target == "grok-build" || strings.EqualFold(body.Name, "grok") {
+			text, err := d.grok.Reply(body.Prompt)
+			if err != nil {
+				writePromptResult(w, 502, err.Error(), err)
+				return
+			}
+			_ = appendGrokLine(d.rroot.TranscriptPath(body.ID), text)
+			writePromptResult(w, 200, truncate(text, 400), nil)
+			return
+		}
 		status, detail, err := d.wh.Post(webhook.Payload{
 			ID:     body.ID,
 			Name:   body.Name,
@@ -395,6 +410,35 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 			"bots":    len(d.h.Bots()),
 		})
 	})
+}
+
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
+func xaiPath() string {
+	if p := os.Getenv("XAI_JSON"); p != "" {
+		return p
+	}
+	return "xai.json"
+}
+
+func appendGrokLine(path, text string) error {
+	if path == "" {
+		return nil
+	}
+	line, _ := json.Marshal(map[string]string{"role": "assistant", "content": truncate(text, 500)})
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(append(line, '\n'))
+	return err
 }
 
 // resolvePromptToken reads only VILLAGE_PROMPT_TOKEN.

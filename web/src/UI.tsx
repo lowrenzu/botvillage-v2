@@ -39,9 +39,9 @@ const KIND_ICON: Record<EvKind, string> = {
   other: '·',
 }
 const PROMPT_CHIPS = [
-  { label: 'Statut ?', text: 'Quel est ton statut actuel ?' },
-  { label: 'Revue', text: 'Fais une brève revue de ta tâche en cours.' },
-  { label: 'Suite', text: 'Quelle est la prochaine étape ?' },
+  { label: 'Statut ?', text: 'Quel est ton statut actuel ?', target: '' },
+  { label: 'Revue', text: 'Fais une brève revue de ta tâche en cours.', target: '' },
+  { label: 'Suite', text: 'Quelle est la prochaine étape ?', target: '' },
 ]
 
 const initial = (name: string) => (name.trim()[0] || '?').toUpperCase()
@@ -99,10 +99,14 @@ export function UI() {
     await sendPrompt(text)
   }
 
-  async function onChip(text: string) {
-    if (!a) return
+  async function onChip(text: string, target = '') {
+    if (!ui.sel) {
+      const top = byVotes('agents', agents)[0]
+      if (!top) return
+      selectAgent(top)
+    }
     setDraft(text)
-    await sendPrompt(text)
+    await sendPrompt(text, target)
     setDraft('')
   }
 
@@ -271,7 +275,7 @@ export function UI() {
               type="button"
               className="chip-btn"
               disabled={!a}
-              onClick={() => onChip(c.text)}
+              onClick={() => onChip(c.text, c.target || '')}
             >
               {c.label}
             </button>
