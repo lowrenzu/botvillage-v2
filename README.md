@@ -13,15 +13,11 @@ cd botvillage
 ```
 
 
-## Share with another Grok Bot user (e.g. Anna)
+## Install (your own agents)
 
-Goal: send **one link** — her Grok Bot clones, builds, and runs the office against **her** `agent-data` (her agents only).
+Point the office at **your** `agent-data` only — never someone else’s roster, webhook, or secrets.
 
-### Link to send
-
-https://github.com/lowrenzu/botvillage
-
-### Prompt she can paste to her Grok Bot / Grok Build
+### One-shot prompt for your Grok Bot / Grok Build
 
 ```
 Install botvillage from https://github.com/lowrenzu/botvillage on my box PC.
@@ -40,13 +36,13 @@ Optional Docker one-shot (if docker/compose installed; same AGENT_DATA, no secre
   # optional: WEBHOOK_JSON=./webhook.json AGENT_DATA=/home/box/agent-data docker compose up --build
 ```
 
-### What “her agents” means
+### What “your agents” means
 
-- Roster = directories under **her** `$AGENT_DATA/agents/` only.
-- No shared Tailscale / webhook / secrets from another user.
-- Optional: `VILLAGE_WS_ORIGINS` if she opens via MagicDNS (see above).
+- Roster = directories under **your** `$AGENT_DATA/agents/` only.
+- No shared Tailscale / webhook / secrets from another install.
+- Optional: `VILLAGE_WS_ORIGINS` if you open via MagicDNS (see Remote access below).
 
-### Demo without her agents
+### Demo without real agents
 
 ```bash
 go run . --demo --listen 0.0.0.0:8040
@@ -57,9 +53,9 @@ go run . --demo --listen 0.0.0.0:8040
 
 Optional path when Docker is available. **Secrets are never baked into the image** — `webhook.json` is excluded from the build context (`.dockerignore`) and must be mounted at runtime.
 
-### Quick start (Anna / any Grok Bot user)
+### Quick start
 
-On the Grok Bot box, your agents usually live at `/home/box/agent-data`:
+On the Grok Bot box, agents usually live at `/home/box/agent-data`:
 
 ```bash
 git clone https://github.com/lowrenzu/botvillage.git
