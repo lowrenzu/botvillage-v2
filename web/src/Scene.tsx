@@ -697,10 +697,26 @@ function AgentView({a,selected}:{a:Agent;selected:boolean}){
    <mesh position={[0,.42,0]} castShadow>
     <capsuleGeometry args={[.28,.42,6,12]}/><meshStandardMaterial color={a.color} roughness={.45} metalness={.03}/>
    </mesh>
+   <mesh position={[0,.62,.16]}>
+    <boxGeometry args={[.34,.08,.06]}/><meshStandardMaterial color="#1c1a17" roughness={.5}/>
+   </mesh>
+   <mesh position={[0,.5,.3]}>
+    <boxGeometry args={[.12,.08,.02]}/><meshStandardMaterial color="#1c1a17" roughness={.4} metalness={.2}/>
+   </mesh>
+   {([[-.34,.58,0],[.34,.58,0]] as [number,number,number][]).map((pos,i)=><mesh key={'sh'+i} position={pos} castShadow>
+    <sphereGeometry args={[.1,12,10]}/><meshStandardMaterial color={a.color} roughness={.4}/>
+   </mesh>)}
+   {[[-.4,.34,0,.4],[.4,.34,0,-.4]].map((v,i)=><mesh key={'arm'+i} position={[v[0],v[1],v[2]]} rotation={[0,0,v[3]]} castShadow>
+    <capsuleGeometry args={[.07,.28,4,8]}/><meshStandardMaterial color={a.color} roughness={.5}/>
+   </mesh>)}
+   {([[-.12,.08,.04],[.12,.08,.04]] as [number,number,number][]).map((pos,i)=><mesh key={'ft'+i} position={pos} castShadow>
+    <capsuleGeometry args={[.07,.1,4,8]}/><meshStandardMaterial color="#1c1a17" roughness={.6}/>
+   </mesh>)}
    <mesh position={[0,.78,0]} scale={[1.015,1.25,1.015]}>
     <sphereGeometry args={[.55,24,12,0,Math.PI*2,Math.PI/2-0.22,0.44]}/>
     <meshStandardMaterial map={band} transparent roughness={.45} metalness={.08} depthWrite={false}/>
    </mesh>
+   <mesh position={[0,1.16,.34]}><boxGeometry args={[.5,.05,.08]}/><meshStandardMaterial color="#14161a" roughness={.4}/></mesh>
    <mesh position={[0,1.05,.4]}><boxGeometry args={[.72,.32,.24]}/><meshStandardMaterial color="#14161a" roughness={.15} metalness={.35}/></mesh>
    <mesh ref={eyeL} position={[-.16,1.05,.53]}><boxGeometry args={[.18,.16,.03]}/><meshBasicMaterial color={a.color}/></mesh>
    <mesh ref={eyeR} position={[.16,1.05,.53]}><boxGeometry args={[.18,.16,.03]}/><meshBasicMaterial color={a.color}/></mesh>
