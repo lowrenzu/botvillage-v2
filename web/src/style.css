@@ -690,6 +690,8 @@ button { font: inherit; }
   color: #8a6a4a;
   background: rgba(180, 140, 90, 0.14);
   border: 1px solid rgba(180, 140, 90, 0.35);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .chip-grok-build {
   border-color: rgba(94, 155, 214, 0.55) !important;
@@ -994,17 +996,10 @@ img.agent-av { width: 36px; height: 36px; border-radius: 12px; }
 .roster.dense .vote-n { font-size: 10px; min-width: 12px; }
 .roster.dense .roster-nofeed {
   margin: 0 4px 0 auto;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-style: normal;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: lowercase;
-  line-height: 1.4;
-  color: #8a6a4a;
-  background: rgba(180, 140, 90, 0.14);
-  border: 1px solid rgba(180, 140, 90, 0.35);
+  padding: 1px 5px;
+  font-size: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .chip-grok-build {
   border-color: rgba(94, 155, 214, 0.55) !important;

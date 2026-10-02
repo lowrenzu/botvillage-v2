@@ -137,8 +137,9 @@ function classify(tx: string): EvKind {
   return 'other'
 }
 
-/** Kinds shown on the session day strip — honest logged motion/prompt only. */
-export const SESSION_KINDS: readonly EvKind[] = ['walk', 'work', 'zzz', 'prompt', 'talk']
+/** Kinds shown on the session day strip — honest logged motion/prompt only.
+ *  zzz omitted: classify maps dort/zzz → other, so chips never appear as zzz. */
+export const SESSION_KINDS: readonly EvKind[] = ['walk', 'work', 'prompt', 'talk']
 
 function log(a: Agent, tx: string) {
   const e: Ev = { t: hm(), a: a.name, tx, c: a.color, kind: classify(tx) }
@@ -152,7 +153,7 @@ function log(a: Agent, tx: string) {
 
 /**
  * Chronological (oldest→newest) session chips from live `feed`.
- * Only real walk/work/zzz/prompt/talk events — no Idle / Session ouverte / other.
+ * Only real walk/work/prompt/talk events — no Idle / Session ouverte / other.
  */
 export function sessionDayTimeline(limit = 36): Ev[] {
   const kinds = new Set<EvKind>(SESSION_KINDS)
@@ -432,7 +433,7 @@ export function syncRoster(bots: BotJSON[]) {
       a = makeAgent(b, agents.length + i)
       agents.push(a)
       if (!ui.sel) ui.sel = a
-      log(a, 'Session ouverte')
+      /* No fake « Session ouverte » — WS connect is not an agent event. */
     } else {
       a.name = b.name || a.name
       a.title = b.title || a.title

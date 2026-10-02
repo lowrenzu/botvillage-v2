@@ -185,7 +185,7 @@ export function UI() {
       <div className="day-strip" aria-label="Mini timeline de session">
         <div className="day-strip-head">
           <span className="day-strip-title">Session</span>
-          <span className="day-strip-hint">marche · travail · idle · consigne · discussion</span>
+          <span className="day-strip-hint">marche · travail · consigne · discussion</span>
         </div>
         <div className="frieze day-frieze" role="list">
           {dayStrip.length === 0 ? (
