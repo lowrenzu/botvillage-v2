@@ -1,182 +1,107 @@
-# botvillage
+# botvillage-v2
 
-Live **3D AI office** for Grok Bots — wood/glass rooms, spherical agents, frosted HUD.
-Stack: **Go** backend (roster, WebSocket, prompt webhook) + **Vite / React / R3F** frontend embedded via `//go:embed`.
+Bureau 3D des agents. Pièces, bots, skills, consignes. Le dépôt public est celui-ci. La v1 (`lowrenzu/botvillage`) est privée.
 
-Default listen: `127.0.0.1:8040`. Each install uses its own agents and its own webhook. Nothing is shared.
+Stack : Go (roster, WebSocket, webhook, relais Grok Build) + Vite / React / R3F, page embarquée par `//go:embed`.
 
-![Bureau des agents — live office](docs/screenshot.png)
+Écoute par défaut : `127.0.0.1:8040`. Chaque install a ses agents et ses secrets. Rien n’est partagé.
 
-## Clone
-
-```bash
-git clone git@github.com:lowrenzu/botvillage.git
-cd botvillage
-```
-
-
-## Install (your machine, your agents)
-
-This repo is a personal office, not a shared server. Clone it, point it at **your** `AGENT_DATA`, and put **your** webhook url+key in a local `webhook.json` that is never committed. Someone else's roster, webhook, or Tailscale name does not belong here.
-
-The webhook key stays on disk. It is not injected into the page. Remote clients (not loopback) need `VILLAGE_PROMPT_TOKEN`. The first page is a gate; the cookie `village_session` then opens the office. Loopback stays open. Docker Compose sets `VILLAGE_LOCAL=1` because the host publish is `127.0.0.1` — remove it if you publish the port. Optional TLS: `VILLAGE_TLS_CERT` and `VILLAGE_TLS_KEY`. It is not injected into the page. If you expose the port, set `VILLAGE_PROMPT_TOKEN` and type that same value once in the HUD field "Jeton" (stored in this browser only).
-
-### One-shot prompt for your Grok Bot / Grok Build
-
-```
-Install botvillage from https://github.com/lowrenzu/botvillage on my box PC.
-
-1. git clone https://github.com/lowrenzu/botvillage.git && cd botvillage
-2. cd web && npm install && npm run build && cd ..
-3. go build -o botvillage .
-4. Copy webhook.json.example → webhook.json and fill MY webhook url+key (never commit).
-5. Run with MY agents:
-   AGENT_DATA=/home/box/agent-data ./botvillage
-6. Open http://127.0.0.1:8040/ . Do not bind 0.0.0.0 unless I set VILLAGE_PROMPT_TOKEN.
-7. Confirm /api/health shows my bot count. Do not use someone else's AGENT_DATA or webhook.json.
-
-Optional Docker one-shot (if docker/compose installed; same AGENT_DATA, no secrets in image):
-  AGENT_DATA=/home/box/agent-data docker compose up --build
-  # optional: WEBHOOK_JSON=./webhook.json AGENT_DATA=/home/box/agent-data docker compose up --build
-```
-
-### What “your agents” means
-
-- Roster = directories under **your** `$AGENT_DATA/agents/` only.
-- No shared Tailscale / webhook / secrets from another install.
-- Optional: `VILLAGE_WS_ORIGINS` if you open via MagicDNS (see Remote access below).
-
-### Demo without real agents
+## Installer
 
 ```bash
-go run . --demo
-```
-
-
-## Docker (one-shot with your AGENT_DATA)
-
-Optional path when Docker is available. **Secrets are never baked into the image** — `webhook.json` is excluded from the build context (`.dockerignore`) and must be mounted at runtime.
-
-### Quick start
-
-On the Grok Bot box, agents usually live at `/home/box/agent-data`:
-
-```bash
-git clone https://github.com/lowrenzu/botvillage.git
-cd botvillage
-
-# Build + run against YOUR agents (read-only mount)
-AGENT_DATA=/home/box/agent-data docker compose up --build
-
-# With your webhook (copy example first; never commit real webhook.json)
-cp webhook.json.example webhook.json   # then edit url+key
-WEBHOOK_JSON=./webhook.json AGENT_DATA=/home/box/agent-data docker compose up --build
-```
-
-Open http://127.0.0.1:8040/ — confirm `GET /api/health` shows **your** bot count.
-
-Compose maps:
-
-| Host | Container | Notes |
-|------|-----------|--------|
-| `$AGENT_DATA` (default `./agent-data`) | `/data` (ro) | Roster root; set to `/home/box/agent-data` on the box |
-| `$WEBHOOK_JSON` (default `./webhook.json.example`) | `/app/webhook.json` (ro) | Point at a real `webhook.json` for prompts |
-| port `8040` | `8040` | Same as native binary |
-
-Image env: `AGENT_DATA=/data`. Optional: `VILLAGE_WS_ORIGINS`, `VILLAGE_PROMPT_TOKEN` (prefer mounted webhook key).
-
-```bash
-# plain docker (no compose)
-docker build -t botvillage:local .
-docker run --rm -p 8040:8040 \
-  -e AGENT_DATA=/data \
-  -v /home/box/agent-data:/data:ro \
-  -v "$PWD/webhook.json:/app/webhook.json:ro" \
-  botvillage:local
-```
-
-Do **not** `COPY webhook.json` into a custom Dockerfile. Do **not** commit secrets.
-
-## Demo (no real agents)
-
-```bash
-go test ./...
-go run . --demo
-# or: go build -o botvillage . && ./botvillage --demo --listen 127.0.0.1:8040
-```
-
-Open http://127.0.0.1:8040/
-
-Demo seeds fake agents under `./demo-data/agents/` and appends JSONL so they walk, work, talk, and sleep.
-
-## Live (real Grok Bot agents)
-
-Point `AGENT_DATA` at a directory that contains `agents/<id>/` (profile.json, optional avatar, optional transcript jsonl):
-
-```bash
-AGENT_DATA=/path/to/agent-data go run .
-```
-
-## Remote access (Tailscale / MagicDNS)
-
-The binary listens on `127.0.0.1:8040` unless you pass `--listen`.
-
-To open the office from another machine on your Tailnet:
-
-1. Install and log in to [Tailscale](https://tailscale.com/) on the host that runs botvillage.
-2. Prefer MagicDNS: open `http://<machine-name>.<tailnet>.ts.net:8040` (or the machine’s `100.x` Tailscale IP).
-3. WebSocket (`/ws`) allows **localhost** by default, plus **same-host** Origins (Origin host matches the page Host). For a custom hostname that does not match, set:
-
-```bash
-export VILLAGE_WS_ORIGINS="http://my-box.tailnet-name.ts.net:8040"
-AGENT_DATA=/path/to/agent-data go run .
-```
-
-Comma-separate several Origins if needed. Do not commit private Tailscale hostnames or `100.x` IPs into the repo.
-
-## Rebuild frontend
-
-```bash
+git clone https://github.com/lowrenzu/botvillage-v2.git
+cd botvillage-v2
 cd web && npm install && npm run build && cd ..
 go build -o botvillage .
 ```
 
-`npm run build` writes into `static/` (embedded by Go). Do not commit `web/node_modules/`.
-
-## Webhook (prompts)
-
-Copy the example and fill **your** values locally (never commit secrets). This key calls your automation. It is not the HUD jeton.
+Puis, sans les committer :
 
 ```bash
-cp webhook.json.example webhook.json
+cp webhook.json.example webhook.json   # url + clé Cursor
+cp xai.json.example xai.json           # clé xAI, ou export XAI_API_KEY
 ```
 
-```json
-{
-  "url": "https://api2.cursor.sh/automations/webhook/YOUR-WEBHOOK-ID",
-  "key": "YOUR-WEBHOOK-KEY"
-}
+Lancer avec tes agents :
+
+```bash
+AGENT_DATA=/home/box/agent-data ./botvillage
 ```
+
+Ouvre http://127.0.0.1:8040/api/health. Attendu : `ok` true, `grokBuild` true si la clé xAI est lue, et ton nombre de bots. Ne bind pas `0.0.0.0` sans `VILLAGE_PROMPT_TOKEN`.
+
+`git status` ne doit pas montrer `webhook.json` ni `xai.json`.
+
+## Ce que fait le bureau
+
+- Le roster vient de `$AGENT_DATA/agents/<id>/`.
+- Une consigne vers un agent Cursor part au webhook. Une consigne vers l’agent nommé Grok, ou le bouton « Grok Build », appelle `https://api.x.ai/v1/responses` avec le modèle `grok-4.7`. La réponse est ajoutée au transcript de cet agent.
+- Le vote `+` / `−` reste dans le navigateur. Il classe le roster et les panneaux Skills / Compétences. Sans agent choisi, la consigne part au mieux classé.
+- Le trait bleu entre deux bots est une déduction : le transcript ne dit pas qui parle à qui.
+
+## Secrets
+
+| Fichier | Rôle |
+|---|---|
+| `webhook.json` | url + clé de l’automation Cursor |
+| `xai.json` ou `XAI_API_KEY` | clé api.x.ai, jamais envoyée au navigateur |
+| `VILLAGE_PROMPT_TOKEN` | jeton si le port sort de la machine |
+
+Le jeton HUD n’est pas la clé webhook. Hors loopback, la première page demande le jeton et pose le cookie `village_session`. Docker Compose met `VILLAGE_LOCAL=1` parce que le port publié est `127.0.0.1`. Si tu publies `0.0.0.0`, retire cette variable et pose le jeton.
+
+## Docker
+
+Les secrets ne sont pas dans l’image.
+
+```bash
+AGENT_DATA=/home/box/agent-data WEBHOOK_JSON=./webhook.json docker compose up --build
+```
+
+Monte aussi `xai.json` si tu l’utilises, ou passe `XAI_API_KEY`.
+
+## Démo sans agents
+
+```bash
+go run . --demo
+```
+
+Ouvre http://127.0.0.1:8040/
+
+## Accès distant
+
+Le binaire écoute `127.0.0.1` sauf `--listen`. Sur un tailnet, ouvre `http://<machine>.<tailnet>.ts.net:8040` et, si l’Origin ne correspond pas :
+
+```bash
+export VILLAGE_WS_ORIGINS="http://ma-machine.tailnet.ts.net:8040"
+```
+
+Ne commit pas le nom Tailscale. TLS optionnel : `VILLAGE_TLS_CERT` et `VILLAGE_TLS_KEY`.
+
+## Rebuild du front
+
+```bash
+cd web && npm run build && cd ..
+go build -o botvillage .
+```
+
+Le build écrit `static/`. Ne commit pas `web/node_modules/`.
 
 ## Endpoints
 
-| Path | Notes |
-|------|--------|
-| `GET /` | SPA (3D office) |
-| `GET /ws` | live activity |
-| `GET /api/bots` | roster JSON |
-| `GET /avatars/{id}` | avatar if present |
-| `POST /api/prompt` | `{id,name,prompt}` |
-| `GET /api/skills` | skill catalog |
-| `GET /api/health` | demo / webhook / bot count |
+| Chemin | Rôle |
+|---|---|
+| `GET /` | bureau |
+| `GET /ws` | activité |
+| `GET /api/bots` | roster |
+| `GET /api/skills` | dossier skills |
+| `GET /avatars/{id}` | avatar |
+| `POST /api/prompt` | `{id,name,prompt,target}` — `target: grok-build` vise xAI |
+| `GET /api/health` | `ok`, `webhook`, `grokBuild`, nombre de bots |
 
-## What is excluded from git
+## Hors git
 
-- `webhook.json` (secrets) — also excluded from Docker build context
-- personal agent ids (`VILLAGE_EXCLUDE` is an env var, not a committed list)
-- `web/node_modules/`, binaries (`botvillage`)
-- `demo-data/`, logs, `.env*`
+`webhook.json`, `xai.json`, `wakes.jsonl`, `.env*`, `demo-data/`, `web/node_modules/`, binaire `botvillage`.
 
-## License
+## Licence
 
-MIT. Keep `webhook.json` private. See LICENSE.
+MIT. Voir LICENSE.
