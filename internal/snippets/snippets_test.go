@@ -69,7 +69,6 @@ func TestGenericChatterEmpty(t *testing.T) {
 	}
 }
 
-
 func TestSnippetTextAssist(t *testing.T) {
 	line := []byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"Briefing reçu — je confirme."}]}}`)
 	got := SnippetText(line)
@@ -119,5 +118,20 @@ func TestSnippetTextHidesHiddenPrompt(t *testing.T) {
 	line := []byte(`{"role":"user","message":{"content":[{"type":"text","text":"[SAND_HIDDEN_PROMPT][agent] secret system stuff"}]}}`)
 	if got := SnippetText(line); got != "" {
 		t.Fatalf("leaked hidden prompt: %q", got)
+	}
+}
+
+func TestIsExplicitIdle(t *testing.T) {
+	if IsExplicitIdle([]byte(`not json`)) || IsExplicitIdle([]byte(`{"type":"system","text":"ping"}`)) {
+		t.Fatal("unknown line is not an idle signal")
+	}
+	if !IsExplicitIdle([]byte(`{"state":"idle"}`)) {
+		t.Fatal("state=idle")
+	}
+	if !IsExplicitIdle([]byte(`{"status":"stopped"}`)) {
+		t.Fatal("status=stopped")
+	}
+	if IsExplicitIdle([]byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"idle later"}]}}`)) {
+		t.Fatal("prose mentioning idle is not a signal")
 	}
 }

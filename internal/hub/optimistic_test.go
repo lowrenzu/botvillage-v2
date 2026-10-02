@@ -28,10 +28,44 @@ func TestPromptOptimisticNoTalk(t *testing.T) {
 	if after == "talk" {
 		t.Fatal("must not invent talk")
 	}
-	// Rollback stays harmless
+	// No fake optimistic state: rollback must not force idle.
 	h.PromptRollback(id)
-	_ = time.Now()
 	if h.Bots()[0].State != "idle" {
-		t.Fatalf("rollback → idle, got %s", h.Bots()[0].State)
+		t.Fatalf("rollback of real idle changed state to %s", h.Bots()[0].State)
 	}
+
+	h.mu.Lock()
+	rt := h.bots[id]
+	rt.gatewayHold = true
+	rt.bot.State = "work"
+	rt.fakeOptimistic = false
+	h.mu.Unlock()
+	h.PromptRollback(id)
+	if got := h.Bots()[0].State; got != "work" {
+		t.Fatalf("rollback overrode gateway work: %s", got)
+	}
+
+	h.mu.Lock()
+	rt = h.bots[id]
+	rt.gatewayHold = true
+	rt.fakeOptimistic = true
+	rt.bot.State = "talk"
+	h.mu.Unlock()
+	h.PromptRollback(id)
+	if got := h.Bots()[0].State; got != "work" {
+		t.Fatalf("fake rollback must restore gateway work, got %s", got)
+	}
+
+	h.mu.Lock()
+	rt = h.bots[id]
+	rt.gatewayHold = false
+	rt.fakeOptimistic = true
+	rt.preOptimistic = "idle"
+	rt.bot.State = "talk"
+	h.mu.Unlock()
+	h.PromptRollback(id)
+	if got := h.Bots()[0].State; got != "idle" {
+		t.Fatalf("fake optimistic rollback want idle got %s", got)
+	}
+	_ = time.Now()
 }

@@ -111,6 +111,31 @@ func hasToolUse(raw json.RawMessage) bool {
 	return false
 }
 
+// IsExplicitIdle is true only for a real idle signal on the line
+// (role/type/state/status is idle, inactive, or stopped). Unknown lines are not idle.
+func IsExplicitIdle(line []byte) bool {
+	line = trimSpace(line)
+	if len(line) == 0 {
+		return false
+	}
+	var env struct {
+		Role   string `json:"role"`
+		Type   string `json:"type"`
+		State  string `json:"state"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(line, &env); err != nil {
+		return false
+	}
+	for _, s := range []string{env.Role, env.Type, env.State, env.Status} {
+		switch strings.ToLower(strings.TrimSpace(s)) {
+		case "idle", "inactive", "stopped":
+			return true
+		}
+	}
+	return false
+}
+
 func trimSpace(b []byte) []byte {
 	i, j := 0, len(b)
 	for i < j && (b[i] == ' ' || b[i] == '\t' || b[i] == '\n' || b[i] == '\r') {

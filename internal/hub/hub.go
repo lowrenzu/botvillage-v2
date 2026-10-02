@@ -34,6 +34,10 @@ type botRuntime struct {
 	lastEvent   time.Time
 	until       time.Time
 	gatewayHold bool // set while SyncGatewayRunning last saw isRunning for this bot
+	// fakeOptimistic is set only when PromptOptimistic invents a state.
+	// PromptRollback may undo that and nothing else (never clobber gateway work).
+	fakeOptimistic bool
+	preOptimistic  string
 }
 
 // Hub fans out roster + activity to websocket clients.
@@ -139,8 +143,15 @@ func (h *Hub) HandleLine(line tail.Line) {
 		bubble = snippets.SnippetText(line.Data)
 		rt.until = now.Add(transcriptTalkHold)
 	default:
-		state = "walk"
-		rt.until = now.Add(5 * time.Second)
+		// Unclassified JSONL must not invent walk/work/talk.
+		// Idle only for an explicit idle signal, and never over gateway isRunning.
+		if !snippets.IsExplicitIdle(line.Data) || rt.gatewayHold || rt.bot.State == "idle" {
+			h.mu.Unlock()
+			return
+		}
+		state = "idle"
+		rt.until = time.Time{}
+		rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
 	}
 	rt.bot.State = state
 	rt.bot.Updated = now
@@ -267,22 +278,42 @@ func (h *Hub) PromptOptimistic(id string) {
 	_ = id
 }
 
-// PromptRollback undoes PromptOptimistic when /api/prompt fails (webhook/grok error).
+// PromptRollback undoes a fake PromptOptimistic state when /api/prompt fails.
+// If nothing fake was applied, it is a no-op. Gateway isRunning=work is never overridden.
 func (h *Hub) PromptRollback(id string) {
 	h.mu.Lock()
 	rt, ok := h.bots[id]
-	if !ok {
+	if !ok || !rt.fakeOptimistic {
 		h.mu.Unlock()
 		return
 	}
+	rt.fakeOptimistic = false
 	now := time.Now()
 	rt.lastEvent = now
-	rt.until = now
-	rt.bot.State = "idle"
-	rt.bot.X = rt.bot.HomeX
-	rt.bot.Y = rt.bot.HomeY
-	rt.bot.Updated = now
-	act := Activity{Type: "state", AgentID: id, State: "idle", Role: rt.bot.LastRole, Bubble: ""}
+	var act Activity
+	if rt.gatewayHold {
+		rt.bot.State = "work"
+		holdUntil := now.Add(liveWorkHold)
+		if holdUntil.After(rt.until) {
+			rt.until = holdUntil
+		}
+		rt.bot.X = rt.bot.HomeX + 18
+		rt.bot.Y = rt.bot.HomeY - 8
+		rt.bot.Updated = now
+		act = Activity{Type: "state", AgentID: id, State: "work", Role: rt.bot.LastRole}
+	} else {
+		prev := rt.preOptimistic
+		if prev != "work" && prev != "talk" && prev != "idle" {
+			prev = "idle"
+		}
+		rt.bot.State = prev
+		if prev == "idle" {
+			rt.until = time.Time{}
+			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
+		}
+		rt.bot.Updated = now
+		act = Activity{Type: "state", AgentID: id, State: prev, Role: rt.bot.LastRole, Bubble: ""}
+	}
 	h.mu.Unlock()
 	h.broadcast(act)
 }

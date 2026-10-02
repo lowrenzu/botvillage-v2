@@ -658,6 +658,7 @@ func authorized(r *http.Request, token string) bool {
 	if localRequest(r) {
 		return true
 	}
+	// RISK: VILLAGE_LOCAL=1 skips the token gate for every peer (0.0.0.0 exposes the LAN); unset it so webhook/prompt still require the token.
 	if os.Getenv("VILLAGE_LOCAL") == "1" {
 		return true
 	}
