@@ -12,8 +12,6 @@ git clone git@github.com:lowrenzu/botvillage.git
 cd botvillage
 ```
 
-Private repo — you need access to `lowrenzu/botvillage`.
-
 ## Demo (no real agents)
 
 ```bash
@@ -33,6 +31,23 @@ Point `AGENT_DATA` at a directory that contains `agents/<id>/` (profile.json, op
 ```bash
 AGENT_DATA=/path/to/agent-data go run . --listen 0.0.0.0:8040
 ```
+
+## Remote access (Tailscale / MagicDNS)
+
+Listening on `0.0.0.0:8040` is enough for local browsers (`http://127.0.0.1:8040`).
+
+To open the office from another machine on your Tailnet:
+
+1. Install and log in to [Tailscale](https://tailscale.com/) on the host that runs botvillage.
+2. Prefer MagicDNS: open `http://<machine-name>.<tailnet>.ts.net:8040` (or the machine’s `100.x` Tailscale IP).
+3. WebSocket (`/ws`) allows **localhost** by default, plus **same-host** Origins (Origin host matches the page Host). For a custom hostname that does not match, set:
+
+```bash
+export VILLAGE_WS_ORIGINS="http://my-box.tailnet-name.ts.net:8040"
+AGENT_DATA=/path/to/agent-data go run . --listen 0.0.0.0:8040
+```
+
+Comma-separate several Origins if needed. Do not commit private Tailscale hostnames or `100.x` IPs into the repo.
 
 ## Rebuild frontend
 
@@ -78,4 +93,4 @@ cp webhook.json.example webhook.json
 
 ## License
 
-Private — all rights reserved.
+MIT-style use at your own risk — no warranty. Keep `webhook.json` private.
