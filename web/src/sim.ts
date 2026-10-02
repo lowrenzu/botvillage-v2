@@ -145,9 +145,8 @@ function arrive(a: Agent) {
   else if (a.bvState === 'talk' || a.talkUntil > performance.now()) a.state = 'collab'
   else if (a.bvState === 'idle') a.state = 'work'
   else a.state = a.room.t === 'meet' ? 'collab' : 'work'
-  const p = a.partnerId ? agents.find(o => o.id === a.partnerId) : null
-  if (p && (a.state === 'collab' || a.bvState === 'talk')) {
-    a.yaw = Math.atan2(p.x - a.x, p.z - a.z)
+  if ((a.state === 'collab' || a.bvState === 'talk') && facePartner(a)) {
+    /* yaw toward talk partner */
   } else {
     a.yaw = a.slot.f
   }
@@ -419,7 +418,10 @@ export function applyBvState(a: Agent, state: BvState, announce = true) {
       a.bubbleUntil = performance.now() + 2800
     }
     if (a.room !== target) go(a, target)
-    else { a.state = 'collab'; a.yaw = a.slot.f }
+    else {
+      a.state = 'collab'
+      if (!facePartner(a)) a.yaw = a.slot.f
+    }
   } else if (state === 'work') {
     clearPartner(a)
     if (announce) log(a, 'Travaille' + (a.role ? ` · ${a.role}` : ''))
@@ -467,6 +469,27 @@ function clearPartner(a: Agent) {
   a.announcedPartner = null
 }
 
+/** Yaw so agent's front (+Z local) points at world (x,z). */
+function faceToward(a: Agent, x: number, z: number) {
+  const dx = x - a.x, dz = z - a.z
+  if (dx * dx + dz * dz < 1e-6) return
+  a.yaw = Math.atan2(dx, dz)
+}
+
+/** Face talk/collab partner when paired. Returns true if partner found. */
+function facePartner(a: Agent): boolean {
+  if (!a.partnerId) return false
+  const p = agents.find(o => o.id === a.partnerId)
+  if (!p) return false
+  faceToward(a, p.x, p.z)
+  return true
+}
+
+/** Standing close enough to prefer facing peer over path/slot. */
+function partnerClose(a: Agent, p: Agent) {
+  return Math.hypot(p.x - a.x, p.z - a.z) < 2.6
+}
+
 function isTalking(a: Agent, now: number) {
   /* Real talk only — not ambient meeting-room collab from a stroll. */
   return a.bvState === 'talk' || a.talkUntil > now
@@ -503,7 +526,7 @@ function approachPeer(a: Agent, b: Agent) {
   const dx = b.x - a.x, dz = b.z - a.z
   const d = Math.hypot(dx, dz)
   if (d < 0.05) return
-  a.yaw = Math.atan2(dx, dz)
+  faceToward(a, b.x, b.z)
   if (d > 2.0 && !a.path.length) {
     const keep = 1.35
     const t = (d - keep) / d
@@ -550,15 +573,22 @@ function resolveMeetups(now: number) {
       if (b.room !== meet && !b.path.length) go(b, meet)
       continue
     }
+    /* Face each other whenever paired — even if peer still walking in. */
+    if (!a.path.length) facePartner(a)
+    if (!b.path.length) facePartner(b)
     if (!a.path.length && !b.path.length) {
       approachPeer(a, b)
       approachPeer(b, a)
       if (!a.path.length && !b.path.length) {
         a.state = 'collab'
         b.state = 'collab'
-        a.yaw = Math.atan2(b.x - a.x, b.z - a.z)
-        b.yaw = Math.atan2(a.x - b.x, a.z - b.z)
+        facePartner(a)
+        facePartner(b)
       }
+    } else {
+      /* Standing partner faces walker when already close. */
+      if (!a.path.length && partnerClose(a, b)) facePartner(a)
+      if (!b.path.length && partnerClose(b, a)) facePartner(b)
     }
   }
   for (const a of talkers) {
@@ -611,6 +641,8 @@ export function step(dt: number) {
       }
     } else if (a.talkUntil > now || a.bvState === 'talk') {
       a.state = 'collab'
+      /* Keep yaw locked on partner while standing in talk/collab. */
+      if (a.partnerId) facePartner(a)
       if (a.bubbleUntil < now && (a.bvState === 'talk' || a.partnerId)) {
         a.timer -= dt
         if (a.timer <= 0) {

@@ -598,16 +598,109 @@ button { font: inherit; }
   cursor: default;
 }
 
-.prompt-phase {
+/* Prompt phase — always visible chip (idle/sent/acked/silent) */
+.phase-chip,
+.phase-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   margin: 0;
-  padding: 0 4px;
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 2px 8px rgba(80, 70, 60, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.7);
   font-size: 11px;
+  font-weight: 600;
+  color: var(--tx2);
+  letter-spacing: 0.01em;
+  min-width: 0;
+}
+.phase-badge {
+  align-self: flex-start;
+  margin: 2px 0 4px;
+}
+.phase-chip .phase-hint {
   font-weight: 500;
   color: var(--mt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
-.prompt-phase.phase-sent { color: #1f7a4d; }
-.prompt-phase.phase-acked { color: var(--mt); }
-.prompt-phase.phase-silent { color: #a05a4a; }
+.phase-chip .phase-key,
+.phase-badge .phase-key {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+.phase-badge b {
+  font-weight: 600;
+  color: var(--mt);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.phase-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #9aa0a6;
+  box-shadow: 0 0 0 2px rgba(154, 160, 166, 0.25);
+}
+.phase-idle .phase-dot { background: #9aa0a6; box-shadow: 0 0 0 2px rgba(154, 160, 166, 0.22); }
+.phase-sent .phase-dot {
+  background: #1f7a4d;
+  box-shadow: 0 0 0 2px rgba(31, 122, 77, 0.28);
+  animation: phase-pulse 1.2s ease-in-out infinite;
+}
+.phase-acked .phase-dot {
+  background: #3a7ebd;
+  box-shadow: 0 0 0 2px rgba(58, 126, 189, 0.28);
+}
+.phase-silent .phase-dot {
+  background: #a05a4a;
+  box-shadow: 0 0 0 2px rgba(160, 90, 74, 0.28);
+}
+.phase-sent .phase-key { color: #1f7a4d; }
+.phase-acked .phase-key { color: #3a7ebd; }
+.phase-silent .phase-key { color: #a05a4a; }
+.phase-idle .phase-key { color: var(--mt); }
+
+@keyframes phase-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+
+.roster-phase {
+  margin: 0 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+.roster-phase.phase-sent {
+  color: #1f7a4d;
+  background: rgba(31, 122, 77, 0.12);
+  border-color: rgba(31, 122, 77, 0.22);
+}
+.roster-phase.phase-acked {
+  color: #3a7ebd;
+  background: rgba(58, 126, 189, 0.12);
+  border-color: rgba(58, 126, 189, 0.22);
+}
+.roster-phase.phase-silent {
+  color: #a05a4a;
+  background: rgba(160, 90, 74, 0.12);
+  border-color: rgba(160, 90, 74, 0.22);
+}
 
 .frieze {
   display: flex;

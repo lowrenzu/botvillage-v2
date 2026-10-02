@@ -18,10 +18,16 @@ const BV: Record<string, string> = {
   zzz: 'Zzz',
 }
 const PHASE: Record<PromptPhase, string> = {
-  idle: '',
-  sent: 'Consigne envoyée',
-  acked: 'Activité détectée',
-  silent: 'Pas de réponse',
+  idle: 'Idle',
+  sent: 'Sent',
+  acked: 'Acked',
+  silent: 'Silent',
+}
+const PHASE_HINT: Record<PromptPhase, string> = {
+  idle: 'Aucune consigne en cours',
+  sent: 'Consigne envoyée — en attente',
+  acked: 'Activité détectée après consigne',
+  silent: 'Pas de réponse / webhook KO',
 }
 const KIND_ICON: Record<EvKind, string> = {
   walk: '→',
@@ -142,6 +148,11 @@ export function UI() {
                 </span>
               )}
               <span className="roster-name">{x.name}</span>
+              {x.promptPhase !== 'idle' ? (
+                <em className={'roster-phase phase-' + x.promptPhase} title={PHASE_HINT[x.promptPhase]}>
+                  {PHASE[x.promptPhase]}
+                </em>
+              ) : null}
               {x === a ? <i className="sel-dot" style={{ background: x.color }} /> : null}
             </button>
           ))}
@@ -222,8 +233,17 @@ export function UI() {
             </button>
           ))}
         </div>
-        {a && a.promptPhase !== 'idle' && PHASE[a.promptPhase] ? (
-          <p className={'prompt-phase phase-' + a.promptPhase}>{PHASE[a.promptPhase]}</p>
+        {a ? (
+          <div
+            className={'phase-chip phase-' + a.promptPhase}
+            title={PHASE_HINT[a.promptPhase]}
+            role="status"
+            aria-label={'Phase consigne : ' + PHASE[a.promptPhase]}
+          >
+            <i className="phase-dot" />
+            <span className="phase-key">{PHASE[a.promptPhase]}</span>
+            <span className="phase-hint">{PHASE_HINT[a.promptPhase]}</span>
+          </div>
         ) : null}
       </div>
         </>
@@ -265,6 +285,16 @@ function AgentCard({ a, mates }: { a: Agent; mates: Agent[] }) {
           {a.room.n}
           {withWhom ? ' · ' + withWhom : ''}
         </span>
+      </div>
+
+      <div
+        className={'phase-badge phase-' + a.promptPhase}
+        title={PHASE_HINT[a.promptPhase]}
+        role="status"
+      >
+        <i className="phase-dot" />
+        <b>Prompt</b>
+        <span className="phase-key">{PHASE[a.promptPhase]}</span>
       </div>
 
       {/* État réel seulement — plus de % inventé (P0) */}
