@@ -34,6 +34,10 @@ Install botvillage from https://github.com/lowrenzu/botvillage on my box PC.
    AGENT_DATA=/home/box/agent-data ./botvillage --listen 0.0.0.0:8040
 6. Open http://127.0.0.1:8040/ (or my Tailscale MagicDNS :8040).
 7. Confirm /api/health shows my bot count. Do not use someone else's AGENT_DATA or webhook.json.
+
+Optional Docker one-shot (if docker/compose installed; same AGENT_DATA, no secrets in image):
+  AGENT_DATA=/home/box/agent-data docker compose up --build
+  # optional: WEBHOOK_JSON=./webhook.json AGENT_DATA=/home/box/agent-data docker compose up --build
 ```
 
 ### What “her agents” means
@@ -47,6 +51,51 @@ Install botvillage from https://github.com/lowrenzu/botvillage on my box PC.
 ```bash
 go run . --demo --listen 0.0.0.0:8040
 ```
+
+
+## Docker (one-shot with your AGENT_DATA)
+
+Optional path when Docker is available. **Secrets are never baked into the image** — `webhook.json` is excluded from the build context (`.dockerignore`) and must be mounted at runtime.
+
+### Quick start (Anna / any Grok Bot user)
+
+On the Grok Bot box, your agents usually live at `/home/box/agent-data`:
+
+```bash
+git clone https://github.com/lowrenzu/botvillage.git
+cd botvillage
+
+# Build + run against YOUR agents (read-only mount)
+AGENT_DATA=/home/box/agent-data docker compose up --build
+
+# With your webhook (copy example first; never commit real webhook.json)
+cp webhook.json.example webhook.json   # then edit url+key
+WEBHOOK_JSON=./webhook.json AGENT_DATA=/home/box/agent-data docker compose up --build
+```
+
+Open http://127.0.0.1:8040/ — confirm `GET /api/health` shows **your** bot count.
+
+Compose maps:
+
+| Host | Container | Notes |
+|------|-----------|--------|
+| `$AGENT_DATA` (default `./agent-data`) | `/data` (ro) | Roster root; set to `/home/box/agent-data` on the box |
+| `$WEBHOOK_JSON` (default `./webhook.json.example`) | `/app/webhook.json` (ro) | Point at a real `webhook.json` for prompts |
+| port `8040` | `8040` | Same as native binary |
+
+Image env: `AGENT_DATA=/data`. Optional: `VILLAGE_WS_ORIGINS`, `VILLAGE_PROMPT_TOKEN` (prefer mounted webhook key).
+
+```bash
+# plain docker (no compose)
+docker build -t botvillage:local .
+docker run --rm -p 8040:8040 \
+  -e AGENT_DATA=/data \
+  -v /home/box/agent-data:/data:ro \
+  -v "$PWD/webhook.json:/app/webhook.json:ro" \
+  botvillage:local
+```
+
+Do **not** `COPY webhook.json` into a custom Dockerfile. Do **not** commit secrets.
 
 ## Demo (no real agents)
 
@@ -123,7 +172,7 @@ cp webhook.json.example webhook.json
 
 ## What is excluded from git
 
-- `webhook.json` (secrets)
+- `webhook.json` (secrets) — also excluded from Docker build context
 - `web/node_modules/`, binaries (`botvillage`)
 - `demo-data/`, logs, `.env*`
 

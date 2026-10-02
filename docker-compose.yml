@@ -1,0 +1,22 @@
+# One-shot office with YOUR agent-data (never bake secrets into the image).
+#
+#   AGENT_DATA=/home/box/agent-data docker compose up --build
+#   # optional webhook:
+#   WEBHOOK_JSON=./webhook.json AGENT_DATA=/home/box/agent-data docker compose up --build
+#
+services:
+  botvillage:
+    build: .
+    image: botvillage:local
+    ports:
+      - "8040:8040"
+    environment:
+      AGENT_DATA: /data
+      # VILLAGE_WS_ORIGINS: "http://my-box.tailnet.ts.net:8040"
+      # VILLAGE_PROMPT_TOKEN: ""   # prefer mounted webhook.json key instead
+    volumes:
+      # Host path → container /data (set AGENT_DATA env when invoking compose)
+      - ${AGENT_DATA:-./agent-data}:/data:ro
+      # Optional: real webhook.json (defaults to the committed example = no secrets)
+      - ${WEBHOOK_JSON:-./webhook.json.example}:/app/webhook.json:ro
+    restart: unless-stopped
