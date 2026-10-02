@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from 'react'
 import {useFrame,useThree} from '@react-three/fiber'
-import {Html,RoundedBox} from '@react-three/drei'
+import {ContactShadows,Html,RoundedBox} from '@react-three/drei'
 import * as THREE from 'three'
 import {agents,rooms,step,ui,useSim,selectAgent,go,CLICK_MOVE_MAX,skillBooks,talkPairs,type Agent,type Room,type SkillJSON} from './sim'
 
@@ -594,8 +594,11 @@ function RoomView({r}:{r:Room}){
   {[[-5,-5],[5,-5],[-5,5],[5,5]].map(([x,z],i)=><Box key={i} p={[x,1.3,z]} a={[.1,2.6,.1]} c={AL} m={.15} ro={.3}/>)}
   <Plant p={[4.3,0,b*4.3]}/>{(r.t==='meet')&&<Plant p={[-4.3,0,b*4.3]}/>}
   {r.t!=='library'&&r.t!=='lab'&&<Credenza p={[0,0,b*4.45]}/>}
-  {/* soft room fill — no castShadow; lower intensity (P1 lights) */}
-  {r.t!=='lab'&&r.t!=='library'&&<pointLight color="#fff1dc" intensity={2.4} distance={10} position={[0,4,0]} castShadow={false}/>}
+  {r.t==='desk'&&<group position={[2.2,0,3.2]}>
+    <mesh position={[0,0.55,0]} castShadow><cylinderGeometry args={[0.04,0.05,1.1,8]}/><meshStandardMaterial color="#8a8176" roughness={0.6} metalness={0.2}/></mesh>
+    <mesh position={[0,1.12,0]}><sphereGeometry args={[0.09,12,10]}/><meshStandardMaterial color="#f3e2c4" emissive="#e7b56a" emissiveIntensity={0.45} roughness={0.4}/></mesh>
+    <pointLight color="#f0d7b4" intensity={0.7} distance={4.5} position={[0,1.05,0]}/>
+  </group>}
   {r.t==='desk'&&[-2.5,2.5].flatMap(dx=>[-2.5,2.5].map(dz=>{const s=dz<0?1:-1;return <group key={dx+'_'+dz} position={[dx,0,dz]}>
    <Box p={[0,.86,0]} a={[3,.07,1.4]} c={WN} ro={.3} m={.05}/><Box p={[-1.35,.41,0]} a={[.08,.82,1.2]} c={GR} m={.8} ro={.3}/><Box p={[1.35,.41,0]} a={[.08,.82,1.2]} c={GR} m={.8} ro={.3}/>
    <group rotation={[0,s>0?0:Math.PI,0]}><Workstation kind={KIND[r.id]}/></group></group>}))}
@@ -689,7 +692,10 @@ function AgentView({a,selected}:{a:Agent;selected:boolean}){
   onPointerOut={()=>{setHovered(false);if(ui.hoverAgent===a)ui.hoverAgent=null}}>
   <group ref={body}>
    <mesh position={[0,.85,0]} scale={[1,1.25,1]} castShadow onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX)selectAgent(a)}}>
-    <sphereGeometry args={[.55,24,16]}/><meshStandardMaterial color={a.color} roughness={.3} metalness={.05}/>
+    <sphereGeometry args={[.38,24,16]}/><meshStandardMaterial color={a.color} roughness={.35} metalness={.04}/>
+   </mesh>
+   <mesh position={[0,.42,0]} castShadow>
+    <capsuleGeometry args={[.28,.42,6,12]}/><meshStandardMaterial color={a.color} roughness={.45} metalness={.03}/>
    </mesh>
    <mesh position={[0,.78,0]} scale={[1.015,1.25,1.015]}>
     <sphereGeometry args={[.55,24,12,0,Math.PI*2,Math.PI/2-0.22,0.44]}/>
@@ -749,16 +755,16 @@ export function Scene(){
  useSim()
  return <>
  <color attach="background" args={['#e7e5e0']}/><fog attach="fog" args={['#e7e5e0',70,160]}/>
- <hemisphereLight args={['#f7f4ee','#7a756c',0.68]}/>
- <ambientLight intensity={0.22} color="#e6e2da"/>
- {/* single shadow caster — smaller map (P1) */}
- <directionalLight castShadow intensity={2.2} color="#fff1dc" position={[16,28,12]} shadow-mapSize={[1024,1024]} shadow-camera-left={-26} shadow-camera-right={26} shadow-camera-top={20} shadow-camera-bottom={-20} shadow-camera-near={1} shadow-camera-far={80} shadow-bias={-.00035} shadow-normalBias={.028}/>
- <directionalLight intensity={0.85} color="#c8d6ea" position={[-18,14,-10]}/>
- <directionalLight intensity={0.5} color="#d0d8e4" position={[-4,9,18]}/>
+ <hemisphereLight args={['#f4efe6','#6e675c',0.42]}/>
+ <ambientLight intensity={0.08} color="#e6e2da"/>
+ {/* one warm rake across the parquet — no bloom, no second sun */}
+ <directionalLight castShadow intensity={1.55} color="#f0d7b4" position={[10,9,6]} shadow-mapSize={[1024,1024]} shadow-camera-left={-26} shadow-camera-right={26} shadow-camera-top={20} shadow-camera-bottom={-20} shadow-camera-near={1} shadow-camera-far={48} shadow-bias={-.0004} shadow-normalBias={.03}/>
+ <directionalLight intensity={0.28} color="#c5d0dc" position={[-14,8,-6]}/>
  <Box p={[0,-.23,0]} a={[38.4,.4,26.4]} c="#cfcac2" ro={.7}/>
  <mesh rotation={[-Math.PI/2,0,0]} receiveShadow><planeGeometry args={[38,26]}/><meshStandardMaterial map={wood} roughness={.5}/></mesh>
  <mesh rotation={[-Math.PI/2,0,0]} position={[0,.015,0]} receiveShadow><planeGeometry args={[38,4]}/><meshStandardMaterial color="#d9d6d0" roughness={.35} metalness={.05}/></mesh>
  {[-2,2].map(z=><Box key={z} p={[0,.022,z]} a={[38,.01,.04]} c="#b4b7bc" m={.15} ro={.3}/>)}
+ <ContactShadows position={[0,0.02,0]} opacity={0.38} scale={36} blur={2.2} far={6} color="#1a1612"/>
  {rooms.map(r=><RoomView key={r.id} r={r}/>)}{rooms.map(r=><RoomLabel key={r.id+"-lbl"} r={r}/>)}
  {agents.map(a=><AgentView key={a.id} a={a} selected={ui.sel===a}/>)}
  <TalkBeams/>
