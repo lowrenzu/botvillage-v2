@@ -10,7 +10,7 @@ import (
 
 func TestPathAndHandler(t *testing.T) {
 	root := t.TempDir()
-	id := "bot-xyz"
+	id := "cb63cb89-8fcf-4dac-b76d-e415c90b4341"
 	dir := filepath.Join(root, id)
 	_ = os.MkdirAll(dir, 0o755)
 	png := filepath.Join(dir, "avatar.png")
@@ -38,7 +38,7 @@ func TestPathAndHandler(t *testing.T) {
 		t.Fatalf("body %q", got)
 	}
 
-	req2 := httptest.NewRequest(http.MethodGet, "/avatars/missing", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/avatars/missing-not-uuid", nil)
 	rr2 := httptest.NewRecorder()
 	h.ServeHTTP(rr2, req2)
 	if rr2.Code != 404 {

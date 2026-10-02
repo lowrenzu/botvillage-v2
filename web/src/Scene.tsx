@@ -24,9 +24,16 @@ function Rig(){
  const s=useRef({az:HOME.az,el:HOME.el,dist:HOME.dist,distWant:HOME.dist,tgt:new THREE.Vector3(),vaz:0,vel:0,dragging:false,booted:false})
  const want=useMemo(()=>new THREE.Vector3(),[]),camWant=useMemo(()=>new THREE.Vector3(),[])
  useEffect(()=>{const el=gl.domElement,v=s.current;let d=false
-  const dn=(e:PointerEvent)=>{d=true;v.dragging=true;v.vaz=0;v.vel=0;ui.moved=0;el.setPointerCapture(e.pointerId)}
-  const up=()=>{d=false;v.dragging=false}
-  const mv=(e:PointerEvent)=>{if(!d)return;ui.moved+=Math.abs(e.movementX)+Math.abs(e.movementY)
+  const pts=new Map<number,{x:number,y:number}>()
+  let pinch=0
+  const span=()=>{const a=[...pts.values()];if(a.length<2)return 0;return Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)}
+  const dn=(e:PointerEvent)=>{pts.set(e.pointerId,{x:e.clientX,y:e.clientY});el.setPointerCapture(e.pointerId)
+   if(pts.size>=2){d=false;v.dragging=false;pinch=span();return}
+   d=true;v.dragging=true;v.vaz=0;v.vel=0;ui.moved=0}
+  const up=(e:PointerEvent)=>{pts.delete(e.pointerId);pinch=pts.size>=2?span():0;if(pts.size===0){d=false;v.dragging=false}}
+  const mv=(e:PointerEvent)=>{if(!pts.has(e.pointerId))return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY})
+   if(pts.size>=2&&pinch>0){const dist=span();if(dist>0){v.distWant=clamp(v.distWant*(pinch/dist),14,80);pinch=dist;if(ui.frame)ui.frame.dist=v.distWant}return}
+   if(!d)return;ui.moved+=Math.abs(e.movementX)+Math.abs(e.movementY)
    const daz=-e.movementX*.0045,del=e.movementY*.0038
    v.az+=daz;v.el=clamp(v.el+del,.28,1.25)
    v.vaz=daz*78;v.vel=del*78

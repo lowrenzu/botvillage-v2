@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -31,29 +30,21 @@ func TestAppendWakeRedactAndPerms(t *testing.T) {
 	if err := json.Unmarshal(b[:len(b)-1], &rec); err != nil {
 		t.Fatal(err)
 	}
-	p, _ := rec["prompt"].(string)
-	if len([]rune(p)) > 81 { // 80 + ellipsis rune
-		t.Fatalf("prompt not redacted: runes=%d bytes=%d", len([]rune(p)), len(p))
+	if _, ok := rec["prompt"]; ok {
+		t.Fatal("prompt plaintext must not be stored")
 	}
-	if !strings.HasSuffix(p, "…") {
-		t.Fatalf("expected ellipsis suffix: %q", p)
-	}
-	if len(string(long)) <= 80 {
-		t.Fatal("test setup")
+	n, _ := rec["promptLen"].(float64)
+	if int(n) != len(long) {
+		t.Fatalf("promptLen %v", rec["promptLen"])
 	}
 	c.EnsureWakesPerms()
 }
 
 func TestRedactPrompt(t *testing.T) {
-	if redactPrompt("short") != "short" {
-		t.Fatal("short")
+	if redactPrompt("") != "" || redactPrompt("   ") != "" {
+		t.Fatal("empty")
 	}
-	s := make([]byte, 100)
-	for i := range s {
-		s[i] = 'b'
-	}
-	got := redactPrompt(string(s))
-	if len([]rune(got)) != 81 || !strings.HasSuffix(got, "…") {
-		t.Fatalf("got %q len %d", got, len(got))
+	if redactPrompt("secret consigne") != "" {
+		t.Fatal("plaintext leaked")
 	}
 }

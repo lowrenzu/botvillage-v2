@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -57,10 +58,15 @@ func (r Resolver) Handler() http.Handler {
 	})
 }
 
-// SanitizeID rejects empty ids and path traversal / separators.
+var uuidLike = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// SanitizeID rejects empty ids, path traversal, and non-UUID ids.
 func SanitizeID(id string) string {
 	id = strings.TrimSpace(id)
 	if id == "" || strings.Contains(id, "..") || strings.ContainsAny(id, `/\`) {
+		return ""
+	}
+	if !uuidLike.MatchString(id) {
 		return ""
 	}
 	return id

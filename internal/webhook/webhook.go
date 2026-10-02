@@ -142,7 +142,7 @@ func (c *Client) appendWake(p Payload, status int, detail string) error {
 		"ts":     time.Now().Format(time.RFC3339),
 		"id":     p.ID,
 		"name":   p.Name,
-		"prompt": redactPrompt(p.Prompt),
+		"promptLen": len(p.Prompt),
 		"action": p.Action,
 		"status": status,
 		"detail": truncate(detail, 400),
@@ -158,16 +158,12 @@ func (c *Client) appendWake(p Payload, status int, detail string) error {
 	return err
 }
 
-// redactPrompt truncates prompt plaintext for wakes.jsonl (no full secret text on disk).
+// redactPrompt drops prompt plaintext. wakes.jsonl keeps a length only.
 func redactPrompt(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
+	if strings.TrimSpace(s) == "" {
 		return ""
 	}
-	if len(s) > 80 {
-		return s[:80] + "…"
-	}
-	return s
+	return ""
 }
 
 // EnsureWakesPerms chmods an existing wakes.jsonl to 0600 if present.

@@ -19,7 +19,7 @@ cd botvillage
 
 This repo is a personal office, not a shared server. Clone it, point it at **your** `AGENT_DATA`, and put **your** webhook url+key in a local `webhook.json` that is never committed. Someone else's roster, webhook, or Tailscale name does not belong here.
 
-The webhook key stays on disk. It is not injected into the page. If you expose the port, set `VILLAGE_PROMPT_TOKEN` and type that same value once in the HUD field "Jeton" (stored in this browser only).
+The webhook key stays on disk. It is not injected into the page. Remote clients (not loopback) need `VILLAGE_PROMPT_TOKEN`. The first page is a gate; the cookie `village_session` then opens the office. Loopback stays open. Docker Compose sets `VILLAGE_LOCAL=1` because the host publish is `127.0.0.1` — remove it if you publish the port. Optional TLS: `VILLAGE_TLS_CERT` and `VILLAGE_TLS_KEY`. It is not injected into the page. If you expose the port, set `VILLAGE_PROMPT_TOKEN` and type that same value once in the HUD field "Jeton" (stored in this browser only).
 
 ### One-shot prompt for your Grok Bot / Grok Build
 
@@ -179,4 +179,4 @@ cp webhook.json.example webhook.json
 
 ## License
 
-MIT-style use at your own risk — no warranty. Keep `webhook.json` private.
+MIT. Keep `webhook.json` private. See LICENSE.

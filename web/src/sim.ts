@@ -515,8 +515,6 @@ function isTalking(a: Agent, now: number) {
   return a.bvState === 'talk' || a.talkUntil > now
 }
 
-const COLLAB_SNIPS = ['…', 'D’accord', 'On regarde', 'OK', 'Hmm', 'Compte tenu…']
-
 function pairAgents(a: Agent, b: Agent, now: number) {
   a.partnerId = b.id
   b.partnerId = a.id
@@ -525,20 +523,8 @@ function pairAgents(a: Agent, b: Agent, now: number) {
   a.state = a.path.length ? 'walk' : 'collab'
   b.state = b.path.length ? 'walk' : 'collab'
   const key = a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id
-  if (a.announcedPartner !== key) {
-    a.announcedPartner = key
-    b.announcedPartner = key
-    log(a, 'Collabore avec ' + b.name)
-    log(b, 'Collabore avec ' + a.name)
-  }
-  if (!a.bubble || a.bubbleUntil < now) {
-    a.bubble = COLLAB_SNIPS[(Math.abs(hash(a.id + String(now | 0))) % COLLAB_SNIPS.length)]
-    a.bubbleUntil = now + 3200
-  }
-  if (!b.bubble || b.bubbleUntil < now) {
-    b.bubble = COLLAB_SNIPS[(Math.abs(hash(b.id + String(now | 0))) + 2) % COLLAB_SNIPS.length]
-    b.bubbleUntil = now + 3200
-  }
+  a.announcedPartner = key
+  b.announcedPartner = key
 }
 
 /** Walk toward peer inside the same room (short local path, no door hop). */
@@ -663,15 +649,6 @@ export function step(dt: number) {
       a.state = 'collab'
       /* Keep yaw locked on partner while standing in talk/collab. */
       if (a.partnerId) facePartner(a)
-      if (a.bubbleUntil < now && (a.bvState === 'talk' || a.partnerId)) {
-        a.timer -= dt
-        if (a.timer <= 0) {
-          a.timer = 4 + Math.random() * 5
-          a.bubble = COLLAB_SNIPS[Math.floor(Math.random() * COLLAB_SNIPS.length)]
-          a.bubbleUntil = now + 2800
-          emit()
-        }
-      }
     } else if (a.state === 'work' || a.state === 'collab') {
       /* talk branch above already handled bvState==='talk' */
       if (a.talkUntil && a.talkUntil <= now) {

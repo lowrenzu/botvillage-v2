@@ -122,7 +122,7 @@ func (h *Hub) HandleLine(line tail.Line) {
 	switch kind {
 	case snippets.KindUser:
 		state = "talk"
-		bubble = snippets.GenericChatter(kind)
+		bubble = "" // no invented speech
 		rt.until = now.Add(talkDuration)
 	case snippets.KindTool:
 		state = "work"
@@ -253,7 +253,7 @@ func (h *Hub) PromptOptimistic(id string) {
 	rt.bot.X = rt.bot.HomeX + 10
 	rt.bot.Y = rt.bot.HomeY
 	rt.bot.Updated = now
-	act := Activity{Type: "state", AgentID: id, State: "talk", Role: rt.bot.LastRole, Bubble: "hey!"}
+	act := Activity{Type: "state", AgentID: id, State: "talk", Role: rt.bot.LastRole, Bubble: ""}
 	h.mu.Unlock()
 	h.broadcast(act)
 }
@@ -270,8 +270,8 @@ func (h *Hub) TrackAll(w *tail.Watcher) error {
 				log.Printf("track %s: %v", b.ID, err)
 			}
 		}
-		w.AddDir(h.Root.AgentsDir())
 	}
+	w.AddDir(h.Root.AgentsDir())
 	return nil
 }
 

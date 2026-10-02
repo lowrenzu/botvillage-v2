@@ -30,8 +30,22 @@ func TestCheckPromptAuth(t *testing.T) {
 	if !checkPromptAuth(req2, tok) {
 		t.Fatal("Bearer")
 	}
-	if !checkPromptAuth(req2, "") {
-		t.Fatal("empty token means local install is open")
+	if checkPromptAuth(req2, "") {
+		t.Fatal("empty token is not a header match")
+	}
+	local := httptest.NewRequest(http.MethodGet, "/api/bots", nil)
+	local.RemoteAddr = "127.0.0.1:9"
+	if !authorized(local, "secret-token") {
+		t.Fatal("loopback must stay open")
+	}
+	remote := httptest.NewRequest(http.MethodGet, "/api/bots", nil)
+	remote.RemoteAddr = "203.0.113.8:9"
+	if authorized(remote, "secret-token") {
+		t.Fatal("remote without token")
+	}
+	remote.Header.Set("X-Village-Token", "secret-token")
+	if !authorized(remote, "secret-token") {
+		t.Fatal("remote header")
 	}
 }
 
@@ -110,6 +124,7 @@ func TestPromptAuthzAndSanitize(t *testing.T) {
 
 	// all existing agents + GET only
 	reqB := httptest.NewRequest(http.MethodGet, "/api/bots", nil)
+	reqB.RemoteAddr = "127.0.0.1:1234"
 	rrB := httptest.NewRecorder()
 	mux.ServeHTTP(rrB, reqB)
 	var payload struct {
@@ -120,6 +135,7 @@ func TestPromptAuthzAndSanitize(t *testing.T) {
 		t.Fatalf("bots roster: want 2 got %+v", payload.Bots)
 	}
 	reqPost := httptest.NewRequest(http.MethodPost, "/api/bots", nil)
+	reqPost.RemoteAddr = "127.0.0.1:1234"
 	rrP := httptest.NewRecorder()
 	mux.ServeHTTP(rrP, reqPost)
 	if rrP.Code != http.StatusMethodNotAllowed {
