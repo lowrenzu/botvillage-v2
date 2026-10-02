@@ -1,18 +1,19 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
 	"flag"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -29,7 +30,7 @@ import (
 var staticFS embed.FS
 
 func main() {
-	listen := flag.String("listen", "0.0.0.0:8040", "listen address")
+	listen := flag.String("listen", "127.0.0.1:8040", "listen address (default loopback; pass 0.0.0.0:8040 only on purpose)")
 	demoMode := flag.Bool("demo", false, "seed fake bots and append JSONL")
 	agentData := flag.String("agent-data", envOr("AGENT_DATA", "."), "AGENT_DATA root")
 	flag.Parse()
@@ -110,13 +111,11 @@ func main() {
 	_ = wh.Load()
 	wh.EnsureWakesPerms()
 
-	promptTok := resolvePromptToken(wh)
+	promptTok := resolvePromptToken()
 	if promptTok == "" {
-		log.Printf("WARN: no prompt auth token (set VILLAGE_PROMPT_TOKEN or webhook.json key) — POST /api/prompt will 401")
-	} else if os.Getenv("VILLAGE_PROMPT_TOKEN") != "" {
-		log.Printf("prompt auth: VILLAGE_PROMPT_TOKEN env")
+		log.Printf("prompt auth: open on this process (set VILLAGE_PROMPT_TOKEN before exposing the port)")
 	} else {
-		log.Printf("prompt auth: webhook.json key field")
+		log.Printf("prompt auth: VILLAGE_PROMPT_TOKEN required (webhook key is never sent to the browser)")
 	}
 
 	mux := http.NewServeMux()
@@ -126,6 +125,7 @@ func main() {
 		h:         h,
 		wh:        wh,
 		promptTok: promptTok,
+		limiter:   newPromptLimiter(12),
 		static:    staticFS,
 	})
 
@@ -149,8 +149,47 @@ type routeDeps struct {
 	h         *hub.Hub
 	wh        *webhook.Client
 	promptTok string
+	limiter   *promptLimiter
 	static    embed.FS
 }
+
+// promptLimiter caps POST /api/prompt per client address.
+type promptLimiter struct {
+	mu    sync.Mutex
+	max   int
+	hits  map[string][]time.Time
+}
+
+func newPromptLimiter(maxPerMin int) *promptLimiter {
+	return &promptLimiter{max: maxPerMin, hits: map[string][]time.Time{}}
+}
+
+func (p *promptLimiter) allow(ip string) bool {
+	if p == nil || p.max <= 0 {
+		return true
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := time.Now()
+	cut := now.Add(-time.Minute)
+	kept := p.hits[ip][:0]
+	for _, t := range p.hits[ip] {
+		if t.After(cut) {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) >= p.max {
+		p.hits[ip] = kept
+		return false
+	}
+	p.hits[ip] = append(kept, now)
+	return true
+}
+
+func hostPort(addr string) (string, string, error) {
+	return net.SplitHostPort(addr)
+}
+
 
 func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	sub, err := fs.Sub(d.static, "static")
@@ -165,12 +204,13 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// Never inject webhook key or prompt token into HTML.
 		b, err := d.static.ReadFile("static/index.html")
 		if err != nil {
 			http.Error(w, "missing index", 500)
 			return
 		}
-		b = injectPromptToken(b, d.promptTok)
 		_, _ = w.Write(b)
 	})
 
@@ -197,6 +237,10 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 			http.Error(w, "POST only", http.StatusMethodNotAllowed)
 			return
 		}
+		if !d.limiter.allow(clientIP(r)) {
+			http.Error(w, `{"error":"rate limit"}`, http.StatusTooManyRequests)
+			return
+		}
 		if !checkPromptAuth(r, d.promptTok) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
@@ -209,8 +253,13 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 			Prompt string `json:"prompt"`
 			Action string `json:"action"`
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "bad json", 400)
+			return
+		}
+		if len(body.Prompt) > 2000 {
+			http.Error(w, `{"error":"prompt too long"}`, 400)
 			return
 		}
 		body.ID = strings.TrimSpace(body.ID)
@@ -268,17 +317,15 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	})
 }
 
-// resolvePromptToken prefers env VILLAGE_PROMPT_TOKEN, else webhook.json "key".
-func resolvePromptToken(wh *webhook.Client) string {
-	if t := strings.TrimSpace(os.Getenv("VILLAGE_PROMPT_TOKEN")); t != "" {
-		return t
-	}
-	return strings.TrimSpace(wh.Snapshot().Key)
+// resolvePromptToken reads only VILLAGE_PROMPT_TOKEN.
+// The webhook key stays on disk and is never copied into the page.
+func resolvePromptToken() string {
+	return strings.TrimSpace(os.Getenv("VILLAGE_PROMPT_TOKEN"))
 }
 
 func checkPromptAuth(r *http.Request, token string) bool {
 	if token == "" {
-		return false
+		return true // local install: the listen address is the boundary
 	}
 	if h := strings.TrimSpace(r.Header.Get("X-Village-Token")); h != "" && h == token {
 		return true
@@ -292,18 +339,16 @@ func checkPromptAuth(r *http.Request, token string) bool {
 	return false
 }
 
-// injectPromptToken inserts window.__VILLAGE_PROMPT_TOKEN__ into SPA HTML for same-origin fetch.
-func injectPromptToken(html []byte, token string) []byte {
-	raw, _ := json.Marshal(token)
-	script := []byte("<script>window.__VILLAGE_PROMPT_TOKEN__=" + string(raw) + ";</script>\n")
-	if i := bytes.Index(html, []byte("</head>")); i >= 0 {
-		out := make([]byte, 0, len(html)+len(script))
-		out = append(out, html[:i]...)
-		out = append(out, script...)
-		out = append(out, html[i:]...)
-		return out
+func clientIP(r *http.Request) string {
+	host, _, err := splitHost(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
 	}
-	return append(script, html...)
+	return host
+}
+
+func splitHost(addr string) (string, string, error) {
+	return hostPort(addr)
 }
 
 func writePromptResult(w http.ResponseWriter, status int, detail string, err error) {

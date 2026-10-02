@@ -721,6 +721,19 @@ export function toggleFollow() {
   emit()
 }
 
+
+/** Local jeton only. Never the webhook key, never injected into HTML. */
+export function promptToken(): string {
+  try { return localStorage.getItem('botvillage.promptToken') || '' } catch { return '' }
+}
+export function setPromptToken(v: string) {
+  try {
+    const t = v.trim()
+    if (t) localStorage.setItem('botvillage.promptToken', t)
+    else localStorage.removeItem('botvillage.promptToken')
+  } catch { /* private mode */ }
+}
+
 export async function sendPrompt(prompt: string): Promise<boolean> {
   const a = ui.sel
   if (!a || !prompt.trim()) return false
@@ -737,7 +750,7 @@ export async function sendPrompt(prompt: string): Promise<boolean> {
   emit()
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    const tok = typeof window !== 'undefined' ? window.__VILLAGE_PROMPT_TOKEN__ : undefined
+    const tok = promptToken()
     if (tok) headers['X-Village-Token'] = tok
     const res = await fetch('/api/prompt', {
       method: 'POST',
@@ -747,7 +760,7 @@ export async function sendPrompt(prompt: string): Promise<boolean> {
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.ok === false) {
       a.promptPhase = 'silent'
-      ui.promptStatus = data.detail || 'Webhook indisponible'
+      ui.promptStatus = res.status === 401 ? 'Jeton requis' : (data.detail || data.error || 'Webhook indisponible')
       log(a, '…?')
       emit()
       return false

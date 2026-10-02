@@ -1,21 +1,35 @@
 package roster
 
-// DefaultAllowlist is empty: all agents under AGENT_DATA are allowed
-// unless listed in DefaultExclude.
+import (
+	"os"
+	"strings"
+)
+
+// DefaultAllowlist is empty: every agent under the local AGENT_DATA is shown.
+// A clone must not inherit someone else's hidden ids.
 var DefaultAllowlist = map[string]struct{}{}
 
-// DefaultExclude hides habitat / Sims side bots from the live bureau roster.
-// Open by default otherwise — not a fixed allowlist.
-var DefaultExclude = map[string]struct{}{
-	"92eb4cb2-b322-465a-8c32-da3d95c2fd0c": {}, // Atelier Sims
-	"724c6013-726c-43f9-b2a6-13fb7f039576": {}, // Georges Habitat
-	"0f82e5f4-125a-4b4e-afd8-ac73ebe1663b": {}, // Dossiers Habitat
+// ExcludeSet reads VILLAGE_EXCLUDE (comma-separated agent ids).
+// Empty unless the person running this install sets it. Never commit ids.
+func ExcludeSet() map[string]struct{} {
+	raw := strings.TrimSpace(os.Getenv("VILLAGE_EXCLUDE"))
+	if raw == "" {
+		return nil
+	}
+	out := make(map[string]struct{})
+	for _, id := range strings.Split(raw, ",") {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			out[id] = struct{}{}
+		}
+	}
+	return out
 }
 
 // Allowed reports whether id is in the allowlist (nil/empty map = allow all)
-// and not in DefaultExclude.
+// and not in VILLAGE_EXCLUDE.
 func Allowed(id string, allow map[string]struct{}) bool {
-	if _, skip := DefaultExclude[id]; skip {
+	if _, skip := ExcludeSet()[id]; skip {
 		return false
 	}
 	if allow == nil || len(allow) == 0 {
@@ -25,8 +39,7 @@ func Allowed(id string, allow map[string]struct{}) bool {
 	return ok
 }
 
-// FilterAllowed keeps bots that pass Allowed (allow nil/empty = no allow filter;
-// DefaultExclude always applies).
+// FilterAllowed keeps bots that pass Allowed.
 func FilterAllowed(bots []Bot, allow map[string]struct{}) []Bot {
 	out := make([]Bot, 0, len(bots))
 	for _, b := range bots {

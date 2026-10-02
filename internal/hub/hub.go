@@ -16,7 +16,6 @@ import (
 
 const (
 	quietZzzAfter  = 2 * time.Minute
-	maxZzzDuration = 75 * time.Second
 	workDuration   = 4 * time.Second
 	talkDuration   = 3 * time.Second
 )
@@ -175,13 +174,7 @@ func (h *Hub) Tick() {
 			rt.lastEvent = now // mark nap start
 			changed = true
 		}
-		// wake after a nap so the office stays alive
-		if rt.bot.State == "zzz" && now.Sub(rt.lastEvent) > maxZzzDuration {
-			rt.bot.State = "walk"
-			rt.lastEvent = now
-			rt.until = now.Add(workDuration)
-			changed = true
-		}
+		// Stay zzz until a real transcript line. Do not invent walks.
 		if changed {
 			rt.bot.Updated = now
 			acts = append(acts, Activity{

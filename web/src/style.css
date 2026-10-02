@@ -897,3 +897,26 @@ img.agent-av { width: 36px; height: 36px; border-radius: 12px; }
   .hud-rail.collapsed .rail-body,
   .hud-rail.collapsed .prompt-block { display: none; }
 }
+
+.token-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mu, #8a8478);
+}
+.token-row input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.25);
+  color: inherit;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}

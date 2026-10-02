@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import {
-  agents, feed, link, ui, useSim, sendPrompt, selectAgent, toggleFollow,
+  agents, feed, link, ui, useSim, sendPrompt, selectAgent, toggleFollow, promptToken, setPromptToken,
   sessionDayTimeline,
   type Agent, type Ev, type EvKind, type PromptPhase,
 } from './sim'
@@ -68,6 +68,7 @@ export function UI() {
   const a = ui.sel
   const [draft, setDraft] = useState('')
   const [railOpen, setRailOpen] = useState(true)
+  const [token, setToken] = useState(promptToken)
   const mates = a
     ? agents.filter(o => {
         if (o === a) return false
@@ -243,6 +244,16 @@ export function UI() {
             </svg>
           </button>
         </form>
+        <label className="token-row">
+          <span>Jeton</span>
+          <input
+            type="password"
+            value={token}
+            autoComplete="off"
+            placeholder="seulement si VILLAGE_PROMPT_TOKEN"
+            onChange={e => { setToken(e.target.value); setPromptToken(e.target.value) }}
+          />
+        </label>
         <div className="prompt-chips">
           {PROMPT_CHIPS.map(c => (
             <button

@@ -9,11 +9,12 @@ services:
     build: .
     image: botvillage:local
     ports:
-      - "8040:8040"
+      # Host loopback only. Remove 127.0.0.1 if you intentionally open Tailscale.
+      - "127.0.0.1:8040:8040"
     environment:
       AGENT_DATA: /data
       # VILLAGE_WS_ORIGINS: "http://my-box.tailnet.ts.net:8040"
-      # VILLAGE_PROMPT_TOKEN: ""   # prefer mounted webhook.json key instead
+      # VILLAGE_PROMPT_TOKEN: ""   # optional HUD jeton; never the webhook key
     volumes:
       # Host path → container /data (set AGENT_DATA env when invoking compose)
       - ${AGENT_DATA:-./agent-data}:/data:ro

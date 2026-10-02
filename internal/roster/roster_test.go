@@ -158,21 +158,16 @@ func TestFilterAllowed(t *testing.T) {
 	}
 }
 
-func TestDefaultExclude(t *testing.T) {
-	hidden := []string{
-		"92eb4cb2-b322-465a-8c32-da3d95c2fd0c",
-		"724c6013-726c-43f9-b2a6-13fb7f039576",
-		"0f82e5f4-125a-4b4e-afd8-ac73ebe1663b",
+func TestExcludeFromEnv(t *testing.T) {
+	id := "92eb4cb2-b322-465a-8c32-da3d95c2fd0c"
+	if !Allowed(id, DefaultAllowlist) {
+		t.Fatal("no VILLAGE_EXCLUDE must keep every agent")
 	}
-	for _, id := range hidden {
-		if Allowed(id, DefaultAllowlist) {
-			t.Fatalf("excluded id should be denied: %s", id)
-		}
+	t.Setenv("VILLAGE_EXCLUDE", id+", not-a-real")
+	if Allowed(id, DefaultAllowlist) {
+		t.Fatal("env exclude should hide id")
 	}
-	bots := []Bot{
-		{ID: "cb63cb89-8fcf-4dac-b76d-e415c90b4341"},
-		{ID: "92eb4cb2-b322-465a-8c32-da3d95c2fd0c"},
-	}
+	bots := []Bot{{ID: "cb63cb89-8fcf-4dac-b76d-e415c90b4341"}, {ID: id}}
 	out := FilterAllowed(bots, DefaultAllowlist)
 	if len(out) != 1 || out[0].ID != "cb63cb89-8fcf-4dac-b76d-e415c90b4341" {
 		t.Fatalf("exclude filter got %+v", out)

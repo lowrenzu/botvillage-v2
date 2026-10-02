@@ -15,14 +15,6 @@ import (
 	"botvillage/internal/webhook"
 )
 
-func TestInjectPromptToken(t *testing.T) {
-	html := []byte("<html><head><title>x</title></head><body></body></html>")
-	out := injectPromptToken(html, `tok"en`)
-	if !bytes.Contains(out, []byte(`window.__VILLAGE_PROMPT_TOKEN__="tok\"en"`)) {
-		t.Fatalf("inject: %s", out)
-	}
-}
-
 func TestCheckPromptAuth(t *testing.T) {
 	tok := "secret-token"
 	req := httptest.NewRequest(http.MethodPost, "/api/prompt", nil)
@@ -38,8 +30,8 @@ func TestCheckPromptAuth(t *testing.T) {
 	if !checkPromptAuth(req2, tok) {
 		t.Fatal("Bearer")
 	}
-	if checkPromptAuth(req2, "") {
-		t.Fatal("empty configured token must deny")
+	if !checkPromptAuth(req2, "") {
+		t.Fatal("empty token means local install is open")
 	}
 }
 
@@ -142,13 +134,14 @@ func TestResolvePromptTokenEnvWins(t *testing.T) {
 	wh := webhook.New(whPath, "")
 	_ = wh.Load()
 	t.Setenv("VILLAGE_PROMPT_TOKEN", "from-env")
-	if got := resolvePromptToken(wh); got != "from-env" {
+	if got := resolvePromptToken(); got != "from-env" {
 		t.Fatalf("got %q", got)
 	}
 	t.Setenv("VILLAGE_PROMPT_TOKEN", "")
-	if got := resolvePromptToken(wh); got != "from-file" {
-		t.Fatalf("fallback got %q", got)
+	if got := resolvePromptToken(); got != "" {
+		t.Fatalf("webhook key must not become the browser token, got %q", got)
 	}
+	_ = wh
 }
 
 func TestHealthAndBotsSmoke(t *testing.T) {

@@ -33,4 +33,5 @@ COPY --from=builder /out/botvillage /app/botvillage
 ENV AGENT_DATA=/data
 EXPOSE 8040
 USER village
+# 0.0.0.0 inside the container; publish 127.0.0.1 on the host.
 CMD ["/app/botvillage", "--listen", "0.0.0.0:8040"]
