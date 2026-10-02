@@ -2,31 +2,35 @@ import {useMemo} from 'react'
 import * as THREE from 'three'
 import {ui,go,CLICK_MOVE_MAX,type Room} from '../sim'
 
-/* floor etch — larger + higher contrast for ¾ cam readability (Elon UI) */
-const etchLabel=(name:string,accent:string)=>{const c=document.createElement('canvas');c.width=1024;c.height=256;const x=c.getContext('2d')!
- x.clearRect(0,0,1024,256)
- /* recessed plate — darker fill for contrast on parquet */
- x.fillStyle='rgba(22,18,14,.62)';x.beginPath();x.roundRect(20,28,984,200,20);x.fill()
- x.strokeStyle='rgba(8,6,4,.7)';x.lineWidth=4;x.beginPath();x.roundRect(22,30,980,196,18);x.stroke()
- x.strokeStyle='rgba(255,248,235,.38)';x.lineWidth=2.5;x.beginPath();x.roundRect(30,38,964,180,14);x.stroke()
+/* Floor etch — Elon DoD: readable no-squint from default ¾ cam.
+   Bigger plane + near-white ink on dark plate (prove larger than 6.6×1.7 / 96px). */
+const etchLabel=(name:string,accent:string)=>{const c=document.createElement('canvas');c.width=1536;c.height=384;const x=c.getContext('2d')!
+ x.clearRect(0,0,1536,384)
+ /* deep recessed plate — high contrast vs parquet */
+ x.fillStyle='rgba(6,5,4,.92)';x.beginPath();x.roundRect(24,36,1488,312,28);x.fill()
+ x.strokeStyle='rgba(0,0,0,.75)';x.lineWidth=6;x.beginPath();x.roundRect(28,40,1480,304,26);x.stroke()
+ /* bright rim for etch catch-light */
+ x.strokeStyle='rgba(255,250,240,.55)';x.lineWidth=3.5;x.beginPath();x.roundRect(40,52,1456,280,20);x.stroke()
+ x.strokeStyle='rgba(255,248,235,.22)';x.lineWidth=1.5;x.beginPath();x.roundRect(52,64,1432,256,16);x.stroke()
  /* accent pip */
- x.fillStyle=accent;x.globalAlpha=.95;x.beginPath();x.arc(88,128,12,0,Math.PI*2);x.fill();x.globalAlpha=1
- x.fillStyle='rgba(255,255,255,.45)';x.beginPath();x.arc(84,123,4,0,Math.PI*2);x.fill()
- x.font='800 96px "Plus Jakarta Sans", system-ui, sans-serif'
+ x.fillStyle=accent;x.globalAlpha=.98;x.beginPath();x.arc(128,192,18,0,Math.PI*2);x.fill();x.globalAlpha=1
+ x.fillStyle='rgba(255,255,255,.55)';x.beginPath();x.arc(122,184,6,0,Math.PI*2);x.fill()
+ x.font='900 148px "Plus Jakarta Sans", system-ui, sans-serif'
  x.textAlign='center';x.textBaseline='middle'
- x.letterSpacing='0.1em' as any
+ x.letterSpacing='0.12em' as any
  const label=name.toUpperCase()
- /* carved shadow + highlight + near-black ink */
- x.fillStyle='rgba(255,252,245,.5)';x.fillText(label,516,112)
- x.fillStyle='rgba(4,2,0,.85)';x.fillText(label,508,140)
- x.fillStyle='rgba(252,248,240,.96)';x.fillText(label,512,126)
+ /* deep carved shadow + near-white ink */
+ x.fillStyle='rgba(0,0,0,.55)';x.fillText(label,772,210)
+ x.fillStyle='rgba(255,252,245,.35)';x.fillText(label,764,168)
+ x.fillStyle='rgba(255,253,248,.98)';x.fillText(label,768,188)
  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;t.premultiplyAlpha=true;return t}
 const RoomLabel=({r}:{r:Room})=>{
  const map=useMemo(()=>etchLabel(r.n,r.c),[r.n,r.c])
- return <mesh rotation={[-Math.PI/2,0,0]} position={[r.x,.14,r.z]} receiveShadow
+ /* was 6.6×1.7 @ y=.14 — now ~40% larger + slightly raised */
+ return <mesh rotation={[-Math.PI/2,0,0]} position={[r.x,.16,r.z]} receiveShadow
   onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel)go(ui.sel,r)}}>
-  <planeGeometry args={[6.6,1.7]}/>
-  <meshStandardMaterial map={map} transparent depthWrite={false} roughness={.86} metalness={.06} polygonOffset polygonOffsetFactor={-2}/>
+  <planeGeometry args={[9.2,2.4]}/>
+  <meshStandardMaterial map={map} transparent depthWrite={false} roughness={.82} metalness={.04} polygonOffset polygonOffsetFactor={-2}/>
  </mesh>}
 
 const initTex=(letter:string)=>{

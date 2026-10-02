@@ -4,7 +4,7 @@ import * as THREE from 'three'
 type V3=[number,number,number]
 
 const Box=({p,a,c,e,r=0,ei=1,m=.1,ro=.55,shadow=false}:{p:V3;a:V3;c:string;e?:string;r?:number;ei?:number;m?:number;ro?:number;shadow?:boolean})=>
- <mesh position={p} rotation={[0,r,0]} castShadow={shadow} receiveShadow={shadow}><boxGeometry args={a}/><meshStandardMaterial color={c} emissive={e||'#1a1816'} emissiveIntensity={ei} roughness={ro} metalness={m}/></mesh>
+ <mesh position={p} rotation={[0,r,0]} castShadow={shadow} receiveShadow={shadow}><boxGeometry args={a}/><meshStandardMaterial color={c} emissive={e||'#3a424c'} emissiveIntensity={ei===1?.18:ei} roughness={ro} metalness={m}/></mesh>
 const AL='#d3d6da',GR='#8f9299',WH='#f2f0ec',WN='#6b5646'
 
 const Plant=({p}:{p:V3})=><group position={p}>
@@ -32,12 +32,12 @@ const labScr=cvs(256,160,x=>{x.fillStyle='#1e2430';x.fillRect(0,0,256,160)
 /* Compétences uses the shared room-scale parquet; racks stay hi-tech. */
 const Metal=({c='#d3d6da',r=.25}:{c?:string;r?:number})=><meshStandardMaterial color={c} metalness={.9} roughness={r}/>
 const Workstation=({kind}:{kind:keyof typeof scr})=><group>
- <RoundedBox args={[1.5,.012,.62]} radius={.006} position={[0,.9,.42]} receiveShadow><meshStandardMaterial color="#3a3d42" roughness={.85}/></RoundedBox>
+ <RoundedBox args={[1.5,.012,.62]} radius={.006} position={[0,.9,.42]} receiveShadow><meshStandardMaterial color="#4a5560" emissive="#4a5560" emissiveIntensity={0.12} roughness={.85}/></RoundedBox>
  <RoundedBox args={[.7,.025,.42]} radius={.012} position={[0,.92,-.15]}><Metal/></RoundedBox>
  <RoundedBox args={[.16,.56,.05]} radius={.02} position={[0,1.2,-.23]} rotation={[-.1,0,0]}><Metal/></RoundedBox>
  <group position={[0,1.66,-.24]} rotation={[-.07,0,0]}>
   <RoundedBox args={[1.56,.92,.05]} radius={.035} smoothness={4} castShadow><Metal c="#c9ccd1" r={.3}/></RoundedBox>
-  <RoundedBox args={[1.52,.88,.01]} radius={.03} position={[0,0,.027]}><meshStandardMaterial color="#2c3036" roughness={.1}/></RoundedBox>
+  <RoundedBox args={[1.52,.88,.01]} radius={.03} position={[0,0,.027]}><meshStandardMaterial color="#3a424c" emissive="#3a424c" emissiveIntensity={0.22} roughness={.1}/></RoundedBox>
   <mesh position={[0,0,.034]}><planeGeometry args={[1.44,.8]}/><meshBasicMaterial map={scr[kind]} toneMapped={false} color="#d8dce2"/></mesh>
   <mesh position={[0,0,.037]}><planeGeometry args={[1.52,.88]}/><meshStandardMaterial color="#fff" transparent opacity={.07} metalness={1} roughness={.04} depthWrite={false}/></mesh>
  </group>

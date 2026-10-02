@@ -33,7 +33,7 @@ function bookSpineTex(label:string,color:string){
 
 function skillListTex(title: string, skills: SkillJSON[]) {
   return cvs(512, 640, x => {
-    x.fillStyle = '#171512'
+    x.fillStyle = '#3a424c'
     x.fillRect(0, 0, 512, 640)
     x.fillStyle = '#c46a32'
     x.fillRect(0, 0, 512, 6)
@@ -45,7 +45,7 @@ function skillListTex(title: string, skills: SkillJSON[]) {
     x.fillText(skills.length ? skills.length + ' au dossier' : 'dossier vide', 28, 78)
     const list = skills.slice(0, 18)
     list.forEach((s, i) => {
-      x.fillStyle = i % 2 ? '#2a2622' : '#221f1c'
+      x.fillStyle = i % 2 ? '#4a5560' : '#424a54'
       x.fillRect(20, 100 + i * 28, 472, 26)
       x.fillStyle = '#f3efe6'
       x.font = '20px sans-serif'
@@ -63,7 +63,7 @@ function SkillBoard({title, skills, p, r = 0}:{title:string; skills:SkillJSON[];
   useEffect(() => () => map.dispose(), [map])
   return <group position={p} rotation={[0, r, 0]}>
     <RoundedBox args={[2.4, 3.0, .06]} radius={.02} position={[0, 1.7, 0]} castShadow>
-      <meshStandardMaterial color="#2a2622" roughness={.6}/>
+      <meshStandardMaterial color="#4a5560" roughness={.6}/>
     </RoundedBox>
     <mesh position={[0, 1.7, .04]}><planeGeometry args={[2.2, 2.75]}/><meshBasicMaterial map={map} toneMapped={false}/></mesh>
   </group>
@@ -252,13 +252,13 @@ function ServerUnit({y,w=1.9}:{y:number;w?:number}){
   const leds=[[-w*.42,'#6ee7a0'],[-w*.32,'#6ee7a0'],[-w*.22,'#94a3b8'],[-w*.08,'#64748b'],[w*.28,'#c8d4e0'],[w*.4,'#c8d4e0']] as [number,string][]
   return <group position={[0,y,0]}>
     <RoundedBox args={[w,.34,.72]} radius={.01} castShadow>
-      <meshStandardMaterial color="#2e343c" metalness={.62} roughness={.32}/>
+      <meshStandardMaterial color="#46515c" emissive="#46515c" emissiveIntensity={0.28} metalness={.45} roughness={.38}/>
     </RoundedBox>
-    <Box p={[0,0,.355]} a={[w-.08,.28,.025]} c="#2e343c" m={.35} ro={.4}/>
+    <Box p={[0,0,.355]} a={[w-.08,.28,.025]} c="#46515c" e="#46515c" ei={0.22} m={.3} ro={.42}/>
     {[-.09,-.03,.03,.09].map((dy,i)=>(
       <mesh key={i} position={[0,dy,.37]}>
         <boxGeometry args={[w*.62,.014,.01]}/>
-        <meshStandardMaterial color="#2a323c" metalness={.35} roughness={.45}/>
+        <meshStandardMaterial color="#4a5560" emissive="#4a5560" emissiveIntensity={0.2} metalness={.28} roughness={.48}/>
       </mesh>
     ))}
     {leds.map(([x,c],i)=>(
@@ -274,12 +274,12 @@ function ServerRack({p,r=0,units=9}:{p:V3;r?:number;units?:number}){
   const H=3.4, W=2.2, D=.95
   return <group position={p} rotation={[0,r,0]}>
     <RoundedBox args={[W,H,D]} radius={.025} position={[0,H/2,0]} castShadow receiveShadow>
-      <meshStandardMaterial color="#2a3038" metalness={.55} roughness={.32}/>
+      <meshStandardMaterial color="#3e4650" emissive="#3e4650" emissiveIntensity={0.26} metalness={.42} roughness={.38}/>
     </RoundedBox>
     <Box p={[-W/2+.05,H/2,D/2-.02]} a={[.08,H-.1,.05]} c={AL} m={.75} ro={.22}/>
     <Box p={[W/2-.05,H/2,D/2-.02]} a={[.08,H-.1,.05]} c={AL} m={.75} ro={.22}/>
-    <Box p={[0,H-.05,0]} a={[W+.06,.1,D+.06]} c="#2a323c" m={.55} ro={.28}/>
-    <Box p={[0,.06,0]} a={[W+.04,.12,D+.04]} c="#14181e" m={.45} ro={.35}/>
+    <Box p={[0,H-.05,0]} a={[W+.06,.1,D+.06]} c="#46515c" e="#46515c" ei={0.22} m={.4} ro={.32}/>
+    <Box p={[0,.06,0]} a={[W+.04,.12,D+.04]} c="#3a424c" e="#3a424c" ei={0.2} m={.35} ro={.4}/>
     <mesh position={[0,H/2,D/2+.02]}>
       <boxGeometry args={[W-.14,H-.22,.03]}/>
       <meshStandardMaterial color="#b8cce0" transparent opacity={.22} roughness={.04} metalness={.35} depthWrite={false}/>
@@ -310,7 +310,7 @@ function CableTray({p,len,ax}:{p:V3;len:number;ax:'x'|'z'}){
       const cpos:V3=ax==='x'?[o,2.2,0]:[0,2.2,o]
       return <mesh key={i} position={cpos}>
         <cylinderGeometry args={[.04,.045,.7,8]}/>
-        <meshStandardMaterial color={i%2?'#374151':'#1f2937'} roughness={.7}/>
+        <meshStandardMaterial color={i%2?'#4a5560':'#3a424c'} roughness={.7}/>
       </mesh>
     })}
   </group>
@@ -324,7 +324,7 @@ function ConsoleDesk({p,r=0}:{p:V3;r?:number}){
     </RoundedBox>
     <Box p={[-1.25,.43,0]} a={[.08,.86,1.05]} c={GR} m={.75} ro={.3}/>
     <Box p={[1.25,.43,0]} a={[.08,.86,1.05]} c={GR} m={.75} ro={.3}/>
-    <Box p={[0,.06,0]} a={[2.7,.08,1.05]} c="#2a3038" m={.4} ro={.4}/>
+    <Box p={[0,.06,0]} a={[2.7,.08,1.05]} c="#3e4650" e="#3e4650" ei={0.2} m={.32} ro={.42}/>
     {/* dual monitors — soft screen glow */}
     <group position={[-.55,1.55,-.28]} rotation={[-.08,0,0]}>
       <RoundedBox args={[1.1,.7,.04]} radius={.015}><Metal c="#c9ccd1" r={.3}/></RoundedBox>
@@ -342,7 +342,7 @@ function ConsoleDesk({p,r=0}:{p:V3;r?:number}){
 
 function StatusPanel({p,r=0}:{p:V3;r?:number}){
   const map=useMemo(()=>cvs(256,160,x=>{
-    x.fillStyle='#12161c';x.fillRect(0,0,256,160)
+    x.fillStyle='#3a424c';x.fillRect(0,0,256,160)
     x.strokeStyle='rgba(180,190,205,.28)';x.lineWidth=2;x.strokeRect(6,6,244,148)
     x.fillStyle='#a8b4c4';x.font='600 13px monospace';x.fillText('CLUSTER · STATUS',16,28)
     const rows=[['ingest','ok'],['embed','ok'],['gate','idle'],['sync','ok']]
@@ -389,12 +389,12 @@ function LabRoom({r}:{r:Room}){
     <SkillBoard title="Compétences" skills={byVotes('skills', skillBooks)} p={[0,0,b*4.35]} r={b>0?Math.PI:0}/>
     <group position={[-3.45,0,b*3.5]}>
       <RoundedBox args={[1.2,1.5,.65]} radius={.015} position={[0,.75,0]} castShadow>
-        <meshStandardMaterial color="#2a3038" metalness={.55} roughness={.3}/>
+        <meshStandardMaterial color="#3e4650" emissive="#3e4650" emissiveIntensity={0.26} metalness={.42} roughness={.36}/>
       </RoundedBox>
       {[0,1,2,3].map(i=>(
         <mesh key={i} position={[0,.38+i*.28,.34]}>
           <boxGeometry args={[1.0,.09,.02]}/>
-          <meshStandardMaterial color="#1a1e24" metalness={.45} roughness={.35}/>
+          <meshStandardMaterial color="#4a5560" emissive="#4a5560" emissiveIntensity={0.2} metalness={.32} roughness={.42}/>
         </mesh>
       ))}
       <mesh position={[.28,1.35,.34]}>
