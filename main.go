@@ -392,7 +392,9 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 				writePromptResult(w, 502, err.Error(), err)
 				return
 			}
-			_ = appendGrokLine(d.rroot.TranscriptPath(body.ID), text)
+			if err := appendGrokLine(d.rroot.TranscriptPath(body.ID), text); err != nil {
+				log.Printf("grok transcript append id=%s: %v", body.ID, err)
+			}
 			writePromptResult(w, 200, truncate(text, 400), nil)
 			return
 		}

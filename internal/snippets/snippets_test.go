@@ -1,6 +1,9 @@
 package snippets
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestClassifyUser(t *testing.T) {
 	line := []byte(`{"role":"user","message":{"content":[{"type":"text","text":"secret hello"}]}}`)
@@ -42,14 +45,19 @@ func TestClassifyGarbage(t *testing.T) {
 }
 
 func TestGoalWord(t *testing.T) {
-	if g := GoalWord("Push hard", "desc"); g != "Push" {
+	if g := GoalWord("Push hard", "desc"); g != "Push hard" {
 		t.Fatalf("got %q", g)
 	}
-	if g := GoalWord("", "— motivateur généraliste"); g != "motivateur" {
+	if g := GoalWord("", "— motivateur généraliste"); g != "motivateur généraliste" {
 		t.Fatalf("got %q", g)
 	}
 	if g := GoalWord("", ""); g != "" {
 		t.Fatalf("got %q", g)
+	}
+	long := strings.Repeat("ab ", 30)
+	g := GoalWord(long, "")
+	if !strings.HasSuffix(g, "…") || len([]rune(g)) > 49 {
+		t.Fatalf("expected clipped snippet, got %q len=%d", g, len([]rune(g)))
 	}
 }
 
