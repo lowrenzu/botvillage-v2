@@ -151,7 +151,7 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
   </Html>
   {/* Nameplate tag — not a speech bubble; always-on status from API bvState */}
   {showTag&&<Html position={[0,2.05,0]} center zIndexRange={[30,20]} style={{pointerEvents:'none'}}>
-   <div ref={tagWrap} className={'tag always big'+(selected?' on':'')+(a.bvState==='work'?' work':'')}>
+   <div ref={tagWrap} className={'tag'+(selected?' on':'')+(a.bvState==='work'?' work':'')}>
     <span className="tag-row">
      {a.hasAvatar?<img className="tag-av" src={`/avatars/${a.id}`} alt=""/>:<i className="dot" style={{background:a.color}}/>}
      {a.name}

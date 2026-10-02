@@ -487,38 +487,31 @@ button { font: inherit; }
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 255, 255, 0.75);
-  border-radius: 12px;
-  padding: 5px 11px;
-  font-size: 12px;
+  border-radius: 8px;
+  padding: 1px 5px;
+  font-size: 10px;
   font-weight: 500;
+  line-height: 1.15;
   white-space: nowrap;
-  box-shadow: 0 6px 20px rgba(80, 70, 60, 0.10), inset 0 1px 1px rgba(255, 255, 255, 0.85);
+  box-shadow: none;
   color: var(--tx);
   font-family: var(--font);
+  transform: none;
 }
-.tag.on { outline: 2px solid rgba(28, 28, 30, 0.18); }
-.tag.always {
-  opacity: 0.96;
-  transform: scale(0.92);
-  transform-origin: center bottom;
-  pointer-events: none;
+.tag:hover,
+.tag.on {
+  outline: 2px solid rgba(28, 28, 30, 0.18);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(80, 70, 60, 0.10), inset 0 1px 1px rgba(255, 255, 255, 0.85);
 }
-.tag.always.big {
-  transform: scale(1.08);
-  font-size: 14px;
-  font-weight: 650;
-  padding: 7px 14px;
-  border: 1px solid rgba(28, 28, 30, 0.22);
-  box-shadow: 0 8px 24px rgba(40, 32, 24, 0.16), inset 0 1px 1px rgba(255, 255, 255, 0.9);
-  color: #1a1c20;
-  background: rgba(255, 252, 246, 0.92);
-}
-.tag.always.big.on { transform: scale(1.14); }
-.tag.always.on { opacity: 1; transform: scale(1); }
 .tag.work small { color: #2f6b4f; font-weight: 700; }
 
-.tag small { color: #3a3e46; display: block; font-size: 12px; font-weight: 600; }
-.tag.always.big small { font-size: 12px; color: #2e3238; }
+.tag small { color: #3a3e46; display: block; font-size: 10px; font-weight: 600; }
+.tag:hover small,
+.tag.on small { font-size: 11px; }
 .dot, .rl i {
   display: inline-block;
   width: 7px; height: 7px;
