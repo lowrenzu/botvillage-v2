@@ -2,7 +2,7 @@ import {memo,useEffect,useMemo,useRef,useState} from 'react'
 import {useFrame,useThree} from '@react-three/fiber'
 import {ContactShadows,Html,RoundedBox} from '@react-three/drei'
 import * as THREE from 'three'
-import {agents,rooms,step,ui,useSim,selectAgent,go,CLICK_MOVE_MAX,skillBooks,talkPairs,byVotes,type Agent,type Room,type SkillJSON} from './sim'
+import {agents,rooms,step,ui,useSim,selectAgent,go,CLICK_MOVE_MAX,skillBooks,collabPairs,byVotes,type Agent,type Room,type SkillJSON} from './sim'
 
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v))
 type V3=[number,number,number]
@@ -649,7 +649,7 @@ function RoomView({r}:{r:Room}){
   {r.t==='lab'&&<LabRoom r={r}/>}
  </group>}
 
-const ST_FR:Record<string,string>={work:'Travaille',collab:'Collabore',walk:'Marche',idle:'Idle'}
+const ST_FR:Record<string,string>={work:'Travaille',collab:'Discussion · déduit',walk:'Marche',idle:'Idle'}
 /** HUD rail width + margin — tags hide when projected into this strip. */
 const RAIL_PAD=380
 
@@ -781,7 +781,7 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
   </group>
   <mesh ref={ring} rotation={[-Math.PI/2,0,0]} position={[0,.04,0]}><ringGeometry args={[.72,selected?.88:.8,32]}/><meshBasicMaterial color={a.color} transparent side={THREE.DoubleSide}/></mesh>
   {/* Speech bubble (transcript) — same markup/CSS for every agent; show via .is-on from useFrame */}
-  <Html position={[0,2.55,0]} center zIndexRange={[50,40]} style={{pointerEvents:'none'}}>
+  <Html position={[0,2.55,0]} center zIndexRange={[50,40]} className="speech-bubble-html">
    <div ref={bubbleWrap} className="speech-bubble" aria-hidden>
     <div ref={bubbleText} className="speech-bubble-text"></div>
    </div>
@@ -799,27 +799,37 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
  </group>})
 
 function TalkBeam({a,b}:{a:Agent;b:Agent}){
+ /* Blue beam = local talk pairing (déduit), not a transcript edge. */
  const mesh=useRef<THREE.Mesh>(null!)
+ const mid=useRef<THREE.Group>(null!)
  const up=useMemo(()=>new THREE.Vector3(0,1,0),[])
  const dir=useMemo(()=>new THREE.Vector3(),[])
  useFrame(()=>{
-  const m=mesh.current;if(!m)return
+  const m=mesh.current,g=mid.current;if(!m||!g)return
   const dx=b.x-a.x,dz=b.z-a.z,d=Math.hypot(dx,dz)
-  if(d<.35){m.visible=false;return}
-  m.visible=true
+  if(d<.35){m.visible=false;g.visible=false;return}
+  m.visible=true;g.visible=true
   m.position.set((a.x+b.x)/2,1.45,(a.z+b.z)/2)
+  g.position.set((a.x+b.x)/2,1.78,(a.z+b.z)/2)
   dir.set(dx,0,dz).normalize()
   m.quaternion.setFromUnitVectors(up,dir)
-  m.scale.set(.045,d,.045)
+  m.scale.set(.032,d,.032)
  })
- return <mesh ref={mesh}>
-  <cylinderGeometry args={[1,1,1,6]}/>
-  <meshBasicMaterial color="#7eb6e8" transparent opacity={.42} depthWrite={false}/>
- </mesh>
+ return <>
+  <mesh ref={mesh}>
+   <cylinderGeometry args={[1,1,1,6]}/>
+   <meshBasicMaterial color="#7eb6e8" transparent opacity={.18} depthWrite={false}/>
+  </mesh>
+  <group ref={mid}>
+   <Html center zIndexRange={[25,15]} style={{pointerEvents:'none'}}>
+    <span className="beam-deduit" title="Appariement local (talk/WS) — pas une arête transcript">déduit</span>
+   </Html>
+  </group>
+ </>
 }
 function TalkBeams(){
  useSim()
- const pairs=talkPairs()
+ const pairs=collabPairs()
  return <>{pairs.map(([a,b])=><TalkBeam key={a.id+'-'+b.id} a={a} b={b}/>)}</>
 }
 function Tick(){useFrame(({clock})=>{scr.code.offset.y=(clock.elapsedTime*.03)%1});return null}

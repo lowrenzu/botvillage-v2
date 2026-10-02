@@ -159,6 +159,8 @@ func TestFilterAllowed(t *testing.T) {
 }
 
 func TestExcludeFromEnv(t *testing.T) {
+	t.Setenv("VILLAGE_EXCLUDE", "")
+	t.Setenv("VILLAGE_ALLOW", "")
 	id := "92eb4cb2-b322-465a-8c32-da3d95c2fd0c"
 	if !Allowed(id, DefaultAllowlist) {
 		t.Fatal("no VILLAGE_EXCLUDE must keep every agent")
@@ -183,5 +185,35 @@ func TestAllowSetFromEnv(t *testing.T) {
 	got := AllowSet()
 	if !Allowed("aaa", got) || !Allowed("bbb", got) || Allowed("ccc", got) {
 		t.Fatalf("AllowSet filter failed: %+v", got)
+	}
+}
+
+func TestHasTranscriptNonempty(t *testing.T) {
+	root := t.TempDir()
+	idEmpty := "empty-bot"
+	idFull := "full-bot"
+	idNone := "none-bot"
+	for _, id := range []string{idEmpty, idFull, idNone} {
+		_ = os.MkdirAll(filepath.Join(root, "agents", id), 0o755)
+	}
+	_ = os.WriteFile(filepath.Join(root, "agents", idEmpty, "chat.jsonl"), []byte(""), 0o644)
+	_ = os.WriteFile(filepath.Join(root, "agents", idFull, "chat.jsonl"), []byte(`{"role":"user"}`+"\n"), 0o644)
+
+	bots, err := (Root{AgentData: root}).List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, b := range bots {
+		got[b.ID] = b.HasTranscript
+	}
+	if got[idFull] != true {
+		t.Fatalf("full want true: %v", got)
+	}
+	if got[idEmpty] != false {
+		t.Fatalf("empty file want false: %v", got)
+	}
+	if got[idNone] != false {
+		t.Fatalf("missing want false: %v", got)
 	}
 }

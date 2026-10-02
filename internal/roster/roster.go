@@ -27,8 +27,10 @@ type Bot struct {
 	X         float64   `json:"x"`
 	Y         float64   `json:"y"`
 	Updated   time.Time `json:"updated"`
-	// Transcript path if jsonl exists; empty ⇒ no live activity feed (Build: expose hasTranscript + UI « no feed » badge).
+	// Transcript path if jsonl exists; empty ⇒ no live activity feed.
 	Transcript string `json:"-"`
+	// HasTranscript is true when a transcript jsonl exists and is non-empty.
+	HasTranscript bool `json:"hasTranscript"`
 }
 
 type profileJSON struct {
@@ -131,6 +133,7 @@ func (r Root) loadBot(id string, idx int) Bot {
 		}
 	}
 	b.Transcript = r.findTranscript(id)
+	b.HasTranscript = transcriptNonempty(b.Transcript)
 	return b
 }
 
@@ -164,6 +167,15 @@ func (r Root) findTranscript(id string) string {
 // TranscriptPath returns the path for an agent id (may be empty).
 func (r Root) TranscriptPath(id string) string {
 	return r.findTranscript(id)
+}
+
+// transcriptNonempty reports whether path exists and has size > 0.
+func transcriptNonempty(path string) bool {
+	if path == "" {
+		return false
+	}
+	st, err := os.Stat(path)
+	return err == nil && !st.IsDir() && st.Size() > 0
 }
 
 func homeSlot(i int) (float64, float64) {

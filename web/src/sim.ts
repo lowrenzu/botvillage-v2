@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from 'react'
+import { voteOf, castVote, byVotes, bindVotesNotify } from './votes'
+export { voteOf, castVote, byVotes }
 
 export type RoomId = 'grok' | 'build' | 'bot' | 'meeting' | 'competences' | 'skills'
 export type BvState = 'idle' | 'walk' | 'work' | 'talk' | 'zzz'
@@ -28,12 +30,15 @@ export interface Agent {
   partnerId: string | null
   /** Last announced partner — avoid spam-logging the same pair. */
   announcedPartner: string | null
+  /** False when no nonempty transcript jsonl — show « no feed » badge. */
+  hasTranscript: boolean
 }
 
 export interface BotJSON {
   id: string; name: string; title?: string; goal?: string; color?: string
   hasAvatar?: boolean; lastRole?: string; state?: string
   homeX?: number; homeY?: number; x?: number; y?: number
+  hasTranscript?: boolean
 }
 
 const NAMED: Record<string, string> = {
@@ -114,6 +119,7 @@ export let demoMode = false
 let version = 0
 const subs = new Set<() => void>()
 const emit = () => { version++; subs.forEach(f => f()) }
+bindVotesNotify(emit)
 export const useSim = () => useSyncExternalStore(
   f => { subs.add(f); return () => { subs.delete(f) } },
   () => version,
@@ -131,8 +137,9 @@ function classify(tx: string): EvKind {
   return 'other'
 }
 
-/** Kinds shown on the session day strip — honest logged motion/prompt only. */
-export const SESSION_KINDS: readonly EvKind[] = ['walk', 'work', 'zzz', 'prompt', 'talk']
+/** Kinds shown on the session day strip — honest logged motion/prompt only.
+ *  zzz omitted: classify maps dort/zzz → other, so chips never appear as zzz. */
+export const SESSION_KINDS: readonly EvKind[] = ['walk', 'work', 'prompt', 'talk']
 
 function log(a: Agent, tx: string) {
   const e: Ev = { t: hm(), a: a.name, tx, c: a.color, kind: classify(tx) }
@@ -146,7 +153,7 @@ function log(a: Agent, tx: string) {
 
 /**
  * Chronological (oldest→newest) session chips from live `feed`.
- * Only real walk/work/zzz/prompt/talk events — no Idle / Session ouverte / other.
+ * Only real walk/work/prompt/talk events — no Idle / Session ouverte / other.
  */
 export function sessionDayTimeline(limit = 36): Ev[] {
   const kinds = new Set<EvKind>(SESSION_KINDS)
@@ -168,7 +175,7 @@ const free = (r: Room) => {
 /** Map live bvState → visual anim. Live: never sleep/zzz pose. */
 function animFromBv(a: Agent): AgentAnim {
   if (a.path.length) return 'walk'
-  if (a.bvState === 'talk' || a.talkUntil > performance.now()) return 'collab'
+  if (a.bvState === 'talk') return 'collab'
   if (a.bvState === 'work') return 'work'
   return 'idle'
 }
@@ -373,6 +380,7 @@ function makeAgent(b: BotJSON, index: number): Agent {
     bubbleUntil: 0,
     partnerId: null,
     announcedPartner: null,
+    hasTranscript: !!b.hasTranscript,
   }
   slot.by = a
   a.state = animFromBv(a)
@@ -425,13 +433,14 @@ export function syncRoster(bots: BotJSON[]) {
       a = makeAgent(b, agents.length + i)
       agents.push(a)
       if (!ui.sel) ui.sel = a
-      log(a, 'Session ouverte')
+      /* No fake « Session ouverte » — WS connect is not an agent event. */
     } else {
       a.name = b.name || a.name
       a.title = b.title || a.title
       a.goal = b.goal || a.goal
       a.color = resolveColor(b.color)
       a.hasAvatar = !!b.hasAvatar
+      a.hasTranscript = !!b.hasTranscript
       if (b.lastRole) a.role = b.lastRole
       const st = (b.state === 'zzz' ? 'idle' : b.state) as BvState
       if (st && st !== a.bvState) applyBvState(a, st, false)
@@ -466,8 +475,12 @@ export function applyBvState(a: Agent, state: BvState, announce = true) {
   /* Live: zzz banned — coerce to idle (no sleep pose / Zzz log). */
   if (state === 'zzz') state = 'idle'
   a.bvState = state
-  if (state === 'idle') {
+  /* Kill sticky Discussion: talkUntil/partner only while bvState===talk. */
+  if (state !== 'talk') {
+    a.talkUntil = 0
     clearPartner(a)
+  }
+  if (state === 'idle') {
     clearBubble(a)
     if (announce && prev !== 'idle') log(a, 'Idle · ' + a.room.n)
     if (a.room.id !== a.home && !a.path.length) go(a, RM[a.home])
@@ -592,9 +605,9 @@ function partnerClose(a: Agent, p: Agent) {
   return Math.hypot(p.x - a.x, p.z - a.z) < 2.6
 }
 
-function isTalking(a: Agent, now: number) {
-  /* Real talk only — not ambient meeting-room collab from a stroll. */
-  return a.bvState === 'talk' || a.talkUntil > now
+function isTalking(a: Agent, _now: number) {
+  /* Real talk only — talkUntil is visual grace, not a talk source (no sticky collab). */
+  return a.bvState === 'talk'
 }
 
 function pairAgents(a: Agent, b: Agent, now: number) {
@@ -685,8 +698,8 @@ function resolveMeetups(now: number) {
   }
 }
 
-/** Active talk beams for Scene — unique unordered pairs. */
-export function talkPairs(): [Agent, Agent][] {
+/** Active talk beams for Scene — unique unordered pairs (local deduction, not transcript). */
+export function collabPairs(): [Agent, Agent][] {
   const now = performance.now()
   const out: [Agent, Agent][] = []
   const seen = new Set<string>()
@@ -701,6 +714,9 @@ export function talkPairs(): [Agent, Agent][] {
   }
   return out
 }
+/** @deprecated use collabPairs */
+export const talkPairs = collabPairs
+
 
 /**
  * Motion tick — mutates agents in place. Does NOT emit React updates;
@@ -727,14 +743,14 @@ export function step(dt: number) {
         dy = Math.atan2(Math.sin(dy), Math.cos(dy))
         a.yaw += dy * (1 - Math.exp(-dt * 5))
       }
-    } else if (a.talkUntil > now || a.bvState === 'talk') {
+    } else if (a.bvState === 'talk') {
       a.state = 'collab'
       /* Keep yaw locked on partner while standing in talk/collab. */
       if (a.partnerId) facePartner(a)
     } else {
       /* Force pose from bvState every tick — sleep cannot stick. */
       if (a.bvState === 'zzz') a.bvState = 'idle'
-      if (a.talkUntil && a.talkUntil <= now) {
+      if (a.talkUntil || a.partnerId) {
         a.talkUntil = 0
         clearPartner(a)
       }
@@ -786,16 +802,14 @@ export function toggleFollow() {
 }
 
 
-/** Local jeton only. Never the webhook key, never injected into HTML. */
+/** HUD jeton in memory only — never localStorage (XSS-readable). Durable auth = opaque HttpOnly village_session cookie. Never the webhook key. */
+let hudPromptToken = ''
 export function promptToken(): string {
-  try { return localStorage.getItem('botvillage.promptToken') || '' } catch { return '' }
+  return hudPromptToken
 }
 export function setPromptToken(v: string) {
-  try {
-    const t = v.trim()
-    if (t) localStorage.setItem('botvillage.promptToken', t)
-    else localStorage.removeItem('botvillage.promptToken')
-  } catch { /* private mode */ }
+  hudPromptToken = (v || '').trim()
+  try { localStorage.removeItem('botvillage.promptToken') } catch { /* private mode */ }
 }
 
 export async function sendPrompt(prompt: string, target = ''): Promise<boolean> {
@@ -892,31 +906,4 @@ export function connectLive() {
     if (timer) clearTimeout(timer)
     ws?.close()
   }
-}
-
-type VoteBag = { agents: Record<string, number>; skills: Record<string, number> }
-const VOTE_KEY = 'botvillage.votes'
-function loadVotes(): VoteBag {
-  try {
-    const raw = localStorage.getItem(VOTE_KEY)
-    if (!raw) return { agents: {}, skills: {} }
-    const p = JSON.parse(raw)
-    return { agents: p.agents || {}, skills: p.skills || {} }
-  } catch {
-    return { agents: {}, skills: {} }
-  }
-}
-let votes: VoteBag = loadVotes()
-export function voteOf(kind: 'agents' | 'skills', id: string) {
-  return votes[kind][id] || 0
-}
-export function castVote(kind: 'agents' | 'skills', id: string, delta: number) {
-  const n = Math.max(0, (votes[kind][id] || 0) + delta)
-  if (n === 0) delete votes[kind][id]
-  else votes[kind][id] = n
-  try { localStorage.setItem(VOTE_KEY, JSON.stringify(votes)) } catch { /* private mode */ }
-  emit()
-}
-export function byVotes<T extends { id: string }>(kind: 'agents' | 'skills', list: T[]): T[] {
-  return [...list].sort((a, b) => (votes[kind][b.id] || 0) - (votes[kind][a.id] || 0) || a.id.localeCompare(b.id))
 }

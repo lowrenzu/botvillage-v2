@@ -35,7 +35,7 @@ Ouvre http://127.0.0.1:8040/api/health. Attendu : `ok` true, `grokBuild` true si
 ## Ce que fait le bureau
 
 - Le roster vient de `$AGENT_DATA/agents/<id>/`. Filtre optionnel : `VILLAGE_ALLOW` / `VILLAGE_EXCLUDE` (ids CSV).
-- Une consigne vers un agent Cursor part au webhook. Une consigne vers l’agent nommé Grok, ou le bouton « Grok Build », appelle `https://api.x.ai/v1/responses` avec le modèle `grok-4.7`. La réponse est ajoutée au transcript de cet agent.
+- Une consigne vers un agent Cursor part au webhook. Une consigne avec `target: grok-build`, l’id Grok Build, le nom « Grok Build » / « Grok », ou le bouton HUD « Grok Build », appelle `https://api.x.ai/v1/responses` avec le modèle `grok-4.7`. La réponse est ajoutée au transcript de cet agent.
 - Le vote `+` / `−` reste dans le navigateur. Il classe le roster et les panneaux Skills / Compétences. Sans agent choisi, la consigne part au mieux classé.
 - Le trait bleu entre deux bots est une déduction : le transcript ne dit pas qui parle à qui.
 
@@ -50,7 +50,9 @@ Ouvre http://127.0.0.1:8040/api/health. Attendu : `ok` true, `grokBuild` true si
 | `VILLAGE_EXCLUDE` | ids à cacher (CSV) |
 | `VILLAGE_LOCAL=1` | log clair ; **n’ouvre pas** Tailscale/LAN sans jeton |
 
-Le jeton HUD n’est pas la clé webhook. Hors loopback, la première page demande le jeton et pose le cookie `village_session`. `VILLAGE_LOCAL=1` ne saute plus l’auth pour les clients non-loopback (Tailscale / LAN) : seuls `127.0.0.1` / `::1` restent ouverts sans jeton. Pose `VILLAGE_PROMPT_TOKEN` (ou un fichier `.prompt-token` gitignoré) dès que tu écoutes `0.0.0.0` ou que tu accèdes via Tailscale.
+Vide `VILLAGE_ALLOW` = tous les agents ; `VILLAGE_EXCLUDE` les cache côté serveur. Le client ne filtre que si `health.allowedIds` est non vide.
+
+Le jeton HUD n’est pas la clé webhook. Hors loopback, la première page demande le jeton et pose un cookie `village_session` **opaque** (id aléatoire côté serveur — jamais le secret brut), conservé dans le fichier local `.village-sessions` pour survivre aux redémarrages (ce n’est toujours pas la clé webhook). Le champ jeton HUD alimente seulement le header `X-Village-Token` **en mémoire** (pas de localStorage du secret). Auth durable = cookie HttpOnly (+ `Secure` si TLS / `X-Forwarded-Proto: https`). `VILLAGE_LOCAL=1` ne saute plus l’auth pour les clients non-loopback (Tailscale / LAN) : seuls `127.0.0.1` / `::1` restent ouverts sans jeton. Pose `VILLAGE_PROMPT_TOKEN` (ou un fichier `.prompt-token` gitignoré) dès que tu écoutes `0.0.0.0` ou que tu accèdes via Tailscale.
 
 ## Docker
 
@@ -113,7 +115,7 @@ Le build écrit `static/`. Ne commit pas `web/node_modules/`.
 | `GET /api/skills` | dossier skills |
 | `GET /avatars/{id}` | avatar |
 | `POST /api/prompt` | `{id,name,prompt,target}` — `target: grok-build` vise xAI |
-| `GET /api/health` | `ok`, `webhook`, `grokBuild`, `bots`, `allowedIds` |
+| `GET /api/health` | loopback/authed: `ok`, `webhook`, `grokBuild`, `bots`, `allowedIds` ; remote anonyme: `{ok:true}` seulement |
 
 ## Hors git
 
@@ -122,3 +124,11 @@ Le build écrit `static/`. Ne commit pas `web/node_modules/`.
 ## Licence
 
 MIT. Voir LICENSE.
+
+## Smoke
+
+```bash
+bash scripts/smoke.sh http://127.0.0.1:8040
+```
+
+GET only (`/api/health`, `/api/bots`, `/api/skills`). Ne POST pas `/api/prompt`.

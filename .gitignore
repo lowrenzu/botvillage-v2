@@ -1,5 +1,6 @@
 # secrets / local runtime
 .prompt-token
+.village-sessions
 webhook.json
 wakes.jsonl
 *.log

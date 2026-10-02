@@ -7,7 +7,7 @@ import {
 
 const ST: Record<string, string> = {
   work: 'Travaille',
-  collab: 'Collabore',
+  collab: 'Discussion · déduit',
   walk: 'Marche',
   sleep: 'Idle',
   idle: 'Idle',
@@ -54,8 +54,8 @@ function friezeLabel(e: Ev): string {
   if (k === 'walk') return e.tx.startsWith('Rejoint') ? e.tx.replace('Rejoint : ', '→ ') : 'Marche'
   if (k === 'work') return 'Travaille'
   if (k === 'talk') {
-    if (e.tx.startsWith('Collabore avec')) {
-      const who = e.tx.replace('Collabore avec ', '')
+    if (e.tx.startsWith('Discussion avec') || e.tx.startsWith('Collabore avec')) {
+      const who = e.tx.replace(/^Discussion avec |^Collabore avec /, '')
       return '◎ ' + (who.length > 12 ? who.slice(0, 10) + '…' : who)
     }
     if (e.tx.startsWith('Parle') || e.tx.startsWith('En discussion')) return 'Parle'
@@ -137,9 +137,9 @@ export function UI() {
       {railOpen && (
         <>
       <div className="rail-stats">
-        <span><i className="dot-live" />{agents.length} en ligne</span>
+        <span><i className="dot-live" />{agents.length} au roster</span>
         <span>{working} au travail</span>
-        <span>{collab} en collab</span>
+        <span>{collab} en discussion (déduit)</span>
         <span>{sleeping} au repos</span>
         <span className="rail-link">{linkLabel}</span>
       </div>
@@ -167,6 +167,9 @@ export function UI() {
                 <i role="button" aria-label="Plus" onClick={ev => { ev.stopPropagation(); castVote('agents', x.id, 1) }}>+</i>
                 <i role="button" aria-label="Moins" onClick={ev => { ev.stopPropagation(); castVote('agents', x.id, -1) }}>−</i>
               </span>
+              {!x.hasTranscript ? (
+                <em className="roster-nofeed" title="Pas de transcript jsonl — pas de feed bulle/WS">no feed</em>
+              ) : null}
               {x.promptPhase !== 'idle' ? (
                 <em className={'roster-phase phase-' + x.promptPhase} title={PHASE_HINT[x.promptPhase]}>
                   {PHASE[x.promptPhase]}
@@ -178,11 +181,11 @@ export function UI() {
         </div>
       )}
 
-      <p className="honest-note" title="Les traits bleus entre bots sont une déduction locale (talk/WS), pas une preuve transcript.">Traits bleus = déduction collab</p>
+      <p className="honest-note" title="Les arêtes bleues 3D sont une déduction locale (talkUntil / pairing), pas des liens transcript. HUD et tags portent aussi « déduit ».">Arêtes bleues = discussion déduite (pas transcript)</p>
       <div className="day-strip" aria-label="Mini timeline de session">
         <div className="day-strip-head">
           <span className="day-strip-title">Session</span>
-          <span className="day-strip-hint">marche · travail · idle · consigne · discussion</span>
+          <span className="day-strip-hint">marche · travail · consigne · discussion</span>
         </div>
         <div className="frieze day-frieze" role="list">
           {dayStrip.length === 0 ? (
@@ -264,7 +267,7 @@ export function UI() {
             type="password"
             value={token}
             autoComplete="off"
-            placeholder="seulement si VILLAGE_PROMPT_TOKEN"
+            placeholder="X-Village-Token (mémoire ; cookie opaque après login)"
             onChange={e => { setToken(e.target.value); setPromptToken(e.target.value) }}
           />
         </label>
@@ -280,6 +283,16 @@ export function UI() {
               {c.label}
             </button>
           ))}
+          {a && (/grok build/i.test(a.name) || a.id === 'da2f664d-ea26-4aa9-a74a-6d969b8405b7') ? (
+            <button
+              type="button"
+              className="chip-btn chip-grok-build"
+              title="Envoie vers xAI (target grok-build)"
+              onClick={() => onChip(draft.trim() || 'Statut ?', 'grok-build')}
+            >
+              Grok Build
+            </button>
+          ) : null}
         </div>
         {a ? (
           <div

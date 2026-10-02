@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"io/fs"
@@ -21,11 +23,11 @@ import (
 
 	"botvillage/internal/avatars"
 	"botvillage/internal/demo"
+	"botvillage/internal/grokbuild"
 	"botvillage/internal/hub"
 	"botvillage/internal/roster"
-	"botvillage/internal/tail"
 	"botvillage/internal/skills"
-	"botvillage/internal/grokbuild"
+	"botvillage/internal/tail"
 	"botvillage/internal/webhook"
 )
 
@@ -41,6 +43,9 @@ func main() {
 	rootDir, _ := os.Getwd()
 	webhookPath := filepath.Join(rootDir, "webhook.json")
 	wakesPath := filepath.Join(rootDir, "wakes.jsonl")
+	if err := loadFromDisk(); err != nil {
+		log.Printf("sessions: %v", err)
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -172,9 +177,9 @@ type routeDeps struct {
 
 // promptLimiter caps POST /api/prompt per client address.
 type promptLimiter struct {
-	mu    sync.Mutex
-	max   int
-	hits  map[string][]time.Time
+	mu   sync.Mutex
+	max  int
+	hits map[string][]time.Time
 }
 
 func newPromptLimiter(maxPerMin int) *promptLimiter {
@@ -206,7 +211,6 @@ func (p *promptLimiter) allow(ip string) bool {
 func hostPort(addr string) (string, string, error) {
 	return net.SplitHostPort(addr)
 }
-
 
 func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	sub, err := fs.Sub(d.static, "static")
@@ -265,12 +269,16 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		sid := newSessionID()
+		putSession(sid)
 		http.SetCookie(w, &http.Cookie{
 			Name:     "village_session",
-			Value:    d.promptTok,
+			Value:    sid,
 			Path:     "/",
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
+			Secure:   cookieSecure(r),
+			Expires:  time.Now().Add(sessionTTL),
 			MaxAge:   60 * 60 * 24 * 30,
 		})
 		if r.Header.Get("Accept") == "application/json" {
@@ -373,7 +381,7 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 			return
 		}
 		d.h.PromptOptimistic(body.ID)
-		if body.Target == "grok-build" || strings.EqualFold(body.Name, "grok") {
+		if isGrokBuildTarget(body.Target, body.Name, body.ID) {
 			text, err := d.grok.Reply(body.Prompt)
 			if err != nil {
 				d.h.PromptRollback(body.ID)
@@ -411,6 +419,11 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		// Non-loopback without auth: scrubbed {ok:true} only (no webhook/grokBuild/bots leak).
+		if !localRequest(r) && !authorized(r, d.promptTok) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+			return
+		}
 		allowed := roster.AllowSet()
 		allowedIDs := make([]string, 0, len(allowed))
 		for id := range allowed {
@@ -427,7 +440,6 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 		})
 	})
 }
-
 
 func truncate(s string, n int) string {
 	if len(s) <= n {
@@ -455,6 +467,150 @@ func appendGrokLine(path, text string) error {
 	defer f.Close()
 	_, err = f.Write(append(line, '\n'))
 	return err
+}
+
+// grokBuildAgentID is the live Grok Build agent UUID (routes prompts to xAI).
+const grokBuildAgentID = "da2f664d-ea26-4aa9-a74a-6d969b8405b7"
+
+// isGrokBuildTarget reports whether /api/prompt should use the xAI grok-build path.
+func isGrokBuildTarget(target, name, id string) bool {
+	if strings.EqualFold(strings.TrimSpace(target), "grok-build") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(id), grokBuildAgentID) {
+		return true
+	}
+	n := strings.TrimSpace(name)
+	if strings.EqualFold(n, "grok") || strings.EqualFold(n, "Grok Build") {
+		return true
+	}
+	return strings.Contains(strings.ToLower(n), "grok build")
+}
+
+// opaque sessions: cookie value is random; never the prompt token.
+// The file is local runtime state, deliberately separate from the webhook key.
+const sessionFile = ".village-sessions"
+
+var (
+	sessionMu  sync.Mutex
+	sessionOK  = map[string]time.Time{} // id → expiry
+	sessionTTL = 30 * 24 * time.Hour
+)
+
+func newSessionID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return hex.EncodeToString([]byte(time.Now().Format(time.RFC3339Nano)))
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// loadFromDisk restores opaque sessions after a process restart. Expired entries
+// are dropped and the pruned object is written back.
+func loadFromDisk() error {
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+
+	b, err := os.ReadFile(sessionFile)
+	if os.IsNotExist(err) {
+		sessionOK = map[string]time.Time{}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var stored map[string]int64
+	if err := json.Unmarshal(b, &stored); err != nil {
+		return err
+	}
+
+	now := time.Now()
+	loaded := make(map[string]time.Time, len(stored))
+	for id, unix := range stored {
+		if id == "" || unix <= now.Unix() {
+			continue
+		}
+		loaded[id] = time.Unix(unix, 0)
+	}
+	pruned := len(loaded) != len(stored)
+	sessionOK = loaded
+	if pruned {
+		return saveSessionsLocked()
+	}
+	return nil
+}
+
+func putSession(id string) {
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+	now := time.Now()
+	for existing, exp := range sessionOK {
+		if !exp.After(now) {
+			delete(sessionOK, existing)
+		}
+	}
+	sessionOK[id] = now.Add(sessionTTL)
+	if err := saveSessionsLocked(); err != nil {
+		log.Printf("sessions: save: %v", err)
+	}
+}
+
+func saveSessionsLocked() error {
+	stored := make(map[string]int64, len(sessionOK))
+	for id, exp := range sessionOK {
+		if id != "" {
+			stored[id] = exp.Unix()
+		}
+	}
+	b, err := json.Marshal(stored)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(".", sessionFile+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(append(b, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, sessionFile)
+}
+
+func validSession(id string) bool {
+	if id == "" {
+		return false
+	}
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+	exp, ok := sessionOK[id]
+	if !ok {
+		return false
+	}
+	if !time.Now().Before(exp) {
+		delete(sessionOK, id)
+		if err := saveSessionsLocked(); err != nil {
+			log.Printf("sessions: save after expiry: %v", err)
+		}
+		return false
+	}
+	return true
+}
+
+func cookieSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 // resolvePromptToken reads VILLAGE_PROMPT_TOKEN, else optional .prompt-token file.
@@ -488,7 +644,7 @@ func checkPromptAuth(r *http.Request, token string) bool {
 }
 
 // authorized allows loopback without a token.
-// Non-loopback clients always need VILLAGE_PROMPT_TOKEN (header or village_session cookie),
+// Non-loopback clients need the prompt token (header) or a valid opaque village_session cookie,
 // even when VILLAGE_LOCAL=1 (that flag must not open Tailscale/LAN peers).
 func authorized(r *http.Request, token string) bool {
 	if localRequest(r) {
@@ -504,7 +660,7 @@ func authorized(r *http.Request, token string) bool {
 	if err != nil {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(c.Value), []byte(token)) == 1
+	return validSession(c.Value)
 }
 
 // localRequest is true only for loopback peers.

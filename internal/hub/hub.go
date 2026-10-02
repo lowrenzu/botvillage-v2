@@ -247,24 +247,10 @@ func (h *Hub) BroadcastRoster() {
 	h.broadcast(Activity{Type: "roster", Bots: bots})
 }
 
-// PromptOptimistic marks a bot as walking/talking after a user prompt.
+// PromptOptimistic is a no-op: do not broadcast fake talk before gateway/transcript proof.
+// Client tracks promptPhase (sent/acked) without inventing bvState=talk.
 func (h *Hub) PromptOptimistic(id string) {
-	h.mu.Lock()
-	rt, ok := h.bots[id]
-	if !ok {
-		h.mu.Unlock()
-		return
-	}
-	now := time.Now()
-	rt.lastEvent = now
-	rt.until = now.Add(talkDuration)
-	rt.bot.State = "talk"
-	rt.bot.X = rt.bot.HomeX + 10
-	rt.bot.Y = rt.bot.HomeY
-	rt.bot.Updated = now
-	act := Activity{Type: "state", AgentID: id, State: "talk", Role: rt.bot.LastRole, Bubble: ""}
-	h.mu.Unlock()
-	h.broadcast(act)
+	_ = id
 }
 
 // PromptRollback undoes PromptOptimistic when /api/prompt fails (webhook/grok error).
