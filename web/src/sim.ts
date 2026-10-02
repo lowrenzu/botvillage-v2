@@ -1,0 +1,673 @@
+import { useSyncExternalStore } from 'react'
+
+export type RoomId = 'grok' | 'build' | 'bot' | 'meeting' | 'competences' | 'skills'
+export type BvState = 'idle' | 'walk' | 'work' | 'talk' | 'zzz'
+export type AgentAnim = 'work' | 'collab' | 'walk' | 'sleep'
+export type PromptPhase = 'idle' | 'sent' | 'acked' | 'silent'
+
+export interface Ev { t: string; a: string; tx: string; c: string; kind?: EvKind }
+export type EvKind = 'walk' | 'work' | 'zzz' | 'prompt' | 'talk' | 'other'
+export interface Slot { x: number; z: number; f: number; by: Agent | null }
+export interface Room {
+  id: RoomId; n: string; x: number; z: number; c: string
+  t: 'desk' | 'meet' | 'library' | 'lab'; s: number; door: number; slots: Slot[]
+}
+export interface Agent {
+  id: string; name: string; role: string; title: string; goal: string
+  color: string; hasAvatar: boolean; home: RoomId
+  path: { x: number; z: number }[]
+  state: AgentAnim; bvState: BvState; timer: number; yaw: number
+  x: number; z: number; slot: Slot; room: Room; log: Ev[]
+  tin: number; tout: number; tt: number
+  promptPhase: PromptPhase
+  talkUntil: number
+  /** Short speech text above agent (from WS bubble or collab snippet). */
+  bubble: string
+  bubbleUntil: number
+  /** Peer agent id when paired for talk/collab — drives beams + meetup. */
+  partnerId: string | null
+  /** Last announced partner — avoid spam-logging the same pair. */
+  announcedPartner: string | null
+}
+
+export interface BotJSON {
+  id: string; name: string; title?: string; goal?: string; color?: string
+  hasAvatar?: boolean; lastRole?: string; state?: string
+  homeX?: number; homeY?: number; x?: number; y?: number
+}
+
+const NAMED: Record<string, string> = {
+  yellow: '#c9a84a', magenta: '#b87a9e', orange: '#c48a5a', blue: '#5e9bd6',
+  green: '#5cb98f', kaki: '#8a9260', black: '#4a4d53', cyan: '#58b3ab',
+  red: '#b87878', purple: '#8e82b0',
+}
+
+export function resolveColor(c?: string): string {
+  if (!c) return '#5e9bd6'
+  if (c.startsWith('#')) return c
+  return NAMED[c] || '#5e9bd6'
+}
+
+/** 3 desk zones (ids stable) + Réunion + Compétences (lab) + Skills (library).
+ *  Floor etch / UI show zone names only — never agent person names. */
+const RD: [RoomId, string, number, number, string, Room['t']][] = [
+  ['grok', 'Atelier', -12, -7, '#5e9bd6', 'desk'],
+  ['build', 'Prod', 0, -7, '#7f86d9', 'desk'],
+  ['bot', 'Ops', 12, -7, '#5cb98f', 'desk'],
+  ['meeting', 'Réunion', -12, 7, '#a783d6', 'meet'],
+  ['competences', 'Compétences', 0, 7, '#c9a84a', 'lab'],
+  ['skills', 'Skills', 12, 7, '#58b3ab', 'library'],
+]
+
+export const rooms: Room[] = RD.map(([id, n, x, z, c, t]) => {
+  const s = z < 0 ? -1 : 1
+  const slots: Slot[] = []
+  const S = (sx: number, sz: number, f: number) => slots.push({ x: sx, z: sz, f, by: null })
+  if (t === 'desk') [-2.5, 2.5].forEach(dx => [-2.5, 2.5].forEach(dz =>
+    S(x + dx, z + dz + (dz < 0 ? 1.5 : -1.5), dz < 0 ? Math.PI : 0)))
+  if (t === 'meet') for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2 + 0.5
+    S(x + Math.sin(a) * 2.9, z + Math.cos(a) * 2.9, a + Math.PI)
+  }
+  if (t === 'library') {
+    /* standing spots between shelves */
+    ;[[-1.8, -1.2], [1.8, -1.2], [-1.8, 1.6], [1.8, 1.6]].forEach(([dx, dz]) =>
+      S(x + dx, z + dz, dz < 0 ? Math.PI : 0))
+  }
+  if (t === 'lab') {
+    /* bench standing positions */
+    ;[[-2.4, -1.8], [2.4, -1.8], [-2.4, 1.8], [2.4, 1.8]].forEach(([dx, dz]) =>
+      S(x + dx, z + dz, dz < 0 ? Math.PI : 0))
+  }
+  /* door on corridor-facing wall, room centerline — hall at z≈0 */
+  return { id, n, x, z, c, t, s, door: z - s * 4.5, slots }
+})
+
+export const RM = Object.fromEntries(rooms.map(r => [r.id, r])) as Record<RoomId, Room>
+const HOME_ORDER: RoomId[] = ['grok', 'build', 'bot', 'meeting', 'competences', 'skills']
+
+/** Pointer drag distance before orbit cancels a click (P2). */
+export const CLICK_MOVE_MAX = 14
+
+export const feed: Ev[] = []
+export const agents: Agent[] = []
+export const ui = {
+  sel: null as Agent | null,
+  follow: false,
+  moved: 0,
+  promptStatus: '' as string,
+  /** soft camera framing request: set on select / Follow */
+  frame: null as { x: number; z: number; az: number; el: number; dist: number } | null,
+  hoverAgent: null as Agent | null,
+}
+
+export interface SkillJSON { id: string; name: string; source: string }
+export const skillBooks: SkillJSON[] = []
+export const SKILL_DISPLAY_CAP = 55
+export let link: 'off' | 'live' | 'down' = 'off'
+
+let version = 0
+const subs = new Set<() => void>()
+const emit = () => { version++; subs.forEach(f => f()) }
+export const useSim = () => useSyncExternalStore(
+  f => { subs.add(f); return () => { subs.delete(f) } },
+  () => version,
+)
+
+const hm = () => new Date().toTimeString().slice(0, 8)
+
+function classify(tx: string): EvKind {
+  const t = tx.toLowerCase()
+  if (t.startsWith('←') || t.includes('consigne') || t.includes('envoyé') || t === '…?' || t === 'hors ligne') return 'prompt'
+  if (t.includes('zzz') || t.includes('dort')) return 'zzz'
+  if (t.includes('rejoint') || t.includes('déplacement') || t.includes('marche')) return 'walk'
+  if (t.includes('parle') || t.includes('discussion') || t.includes('collab')) return 'talk'
+  if (t.includes('travaille') || t.includes('tâche')) return 'work'
+  return 'other'
+}
+
+function log(a: Agent, tx: string) {
+  const e: Ev = { t: hm(), a: a.name, tx, c: a.color, kind: classify(tx) }
+  feed.unshift(e)
+  a.log.unshift(e)
+  feed.length = Math.min(feed.length, 40)
+  a.log.length = Math.min(a.log.length, 12)
+  emit()
+}
+
+const free = (r: Room) => {
+  const f = r.slots.filter(q => !q.by)
+  return f.length ? f[Math.floor(Math.random() * f.length)] : null
+}
+
+function arrive(a: Agent) {
+  if (a.bvState === 'zzz') a.state = 'sleep'
+  else if (a.bvState === 'talk' || a.talkUntil > performance.now()) a.state = 'collab'
+  else if (a.bvState === 'idle') a.state = 'work'
+  else a.state = a.room.t === 'meet' ? 'collab' : 'work'
+  const p = a.partnerId ? agents.find(o => o.id === a.partnerId) : null
+  if (p && (a.state === 'collab' || a.bvState === 'talk')) {
+    a.yaw = Math.atan2(p.x - a.x, p.z - a.z)
+  } else {
+    a.yaw = a.slot.f
+  }
+}
+
+/** Deduplicate successive near-identical waypoints. */
+function compactPath(pts: { x: number; z: number }[]) {
+  const out: { x: number; z: number }[] = []
+  for (const p of pts) {
+    const last = out[out.length - 1]
+    if (last && Math.hypot(p.x - last.x, p.z - last.z) < 0.08) continue
+    out.push(p)
+  }
+  return out
+}
+
+/**
+ * Door → corridor (z≈0) → door path for all room types.
+ * Avoids diagonal cuts through room interiors: exit via own door,
+ * walk the hall, enter target door, then to slot.
+ */
+export function go(a: Agent, r: Room) {
+  const q = free(r)
+  if (!q) return
+  if (a.room === r && !a.path.length) {
+    a.slot.by = null
+    q.by = a
+    a.slot = q
+    a.x = q.x
+    a.z = q.z
+    a.yaw = q.f
+    arrive(a)
+    return
+  }
+  const f = a.room
+  /* centerline → door → hall → door → slot (never clip side panes) */
+  const path = compactPath([
+    { x: f.x, z: a.z },
+    { x: f.x, z: f.door },
+    { x: f.x, z: 0 },
+    { x: r.x, z: 0 },
+    { x: r.x, z: r.door },
+    { x: r.x, z: q.z },
+    { x: q.x, z: q.z },
+  ])
+  a.path = path
+  a.slot.by = null
+  q.by = a
+  a.slot = q
+  a.room = r
+  a.state = 'walk'
+  log(a, 'Rejoint : ' + r.n)
+}
+
+function homeForIndex(i: number): RoomId {
+  return HOME_ORDER[i % HOME_ORDER.length]
+}
+
+function roomForState(a: Agent, state: BvState): Room {
+  if (state === 'talk') return RM.meeting
+  if (state === 'work' || state === 'walk') {
+    const desk = rooms.filter(r => r.t === 'desk')
+    return desk[Math.abs(hash(a.id)) % desk.length] || RM[a.home]
+  }
+  if (state === 'zzz' || state === 'idle') return RM[a.home]
+  return RM[a.home]
+}
+
+function hash(s: string) {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return h
+}
+
+function makeAgent(b: BotJSON, index: number): Agent {
+  const home = homeForIndex(index)
+  const room = RM[home]
+  const slot = free(room) || room.slots[0]
+  const color = resolveColor(b.color)
+  const title = b.title || ''
+  const role = b.lastRole || title || 'Agent'
+  const a: Agent = {
+    id: b.id,
+    name: b.name || b.id.slice(0, 8),
+    role,
+    title,
+    goal: b.goal || '',
+    color,
+    hasAvatar: !!b.hasAvatar,
+    home,
+    path: [],
+    state: 'work',
+    bvState: (b.state as BvState) || 'idle',
+    timer: 4 + Math.random() * 6,
+    yaw: slot.f,
+    x: slot.x,
+    z: slot.z,
+    slot,
+    room,
+    log: [],
+    tin: 0,
+    tout: 0,
+    tt: 0,
+    promptPhase: 'idle',
+    talkUntil: 0,
+    bubble: '',
+    bubbleUntil: 0,
+    partnerId: null,
+    announcedPartner: null,
+  }
+  slot.by = a
+  if (a.bvState === 'zzz') a.state = 'sleep'
+  return a
+}
+
+function releaseSlot(a: Agent) {
+  if (a.slot && a.slot.by === a) a.slot.by = null
+}
+
+/** Client allow-list — empty means all agents; the server also allows all AGENT_DATA agents. */
+export const ALLOWED_IDS = new Set<string>([
+  // intentionally empty — server allows all agent-data agents
+])
+
+/** Replace / upsert agents from /api/bots or roster WS. */
+export function syncRoster(bots: BotJSON[]) {
+  if (ALLOWED_IDS.size > 0) bots = bots.filter(b => ALLOWED_IDS.has(b.id))
+  const keep = new Set(bots.map(b => b.id))
+  for (let i = agents.length - 1; i >= 0; i--) {
+    if (!keep.has(agents[i].id)) {
+      releaseSlot(agents[i])
+      if (ui.sel === agents[i]) ui.sel = null
+      agents.splice(i, 1)
+    }
+  }
+  bots.forEach((b, i) => {
+    let a = agents.find(x => x.id === b.id)
+    if (!a) {
+      a = makeAgent(b, agents.length + i)
+      agents.push(a)
+      if (!ui.sel) ui.sel = a
+      log(a, 'Session ouverte')
+    } else {
+      a.name = b.name || a.name
+      a.title = b.title || a.title
+      a.goal = b.goal || a.goal
+      a.color = resolveColor(b.color)
+      a.hasAvatar = !!b.hasAvatar
+      if (b.lastRole) a.role = b.lastRole
+      if (b.state && b.state !== a.bvState) applyBvState(a, b.state as BvState, false)
+    }
+  })
+  if (!ui.sel && agents.length) ui.sel = agents[0]
+  emit()
+}
+
+export function applyBvState(a: Agent, state: BvState, announce = true) {
+  const prev = a.bvState
+  a.bvState = state
+  if (state === 'zzz') {
+    a.state = a.path.length ? 'walk' : 'sleep'
+    clearPartner(a)
+    if (announce && prev !== 'zzz') log(a, 'Zzz…')
+    if (a.room.id !== a.home && !a.path.length) go(a, RM[a.home])
+    emit()
+    return
+  }
+  if (state === 'idle') {
+    clearPartner(a)
+    if (announce && prev !== 'idle') log(a, 'Idle · ' + a.room.n)
+    if (a.room.id !== a.home && !a.path.length) go(a, RM[a.home])
+    else if (!a.path.length) { a.state = 'work'; a.yaw = a.slot.f }
+    emit()
+    return
+  }
+  const target = roomForState(a, state)
+  if (state === 'talk') {
+    a.talkUntil = Math.max(a.talkUntil, performance.now() + 7000)
+    if (announce) log(a, a.role ? `Parle · ${a.role}` : 'En discussion')
+    if (!a.bubble || a.bubbleUntil < performance.now()) {
+      a.bubble = '…'
+      a.bubbleUntil = performance.now() + 2800
+    }
+    if (a.room !== target) go(a, target)
+    else { a.state = 'collab'; a.yaw = a.slot.f }
+  } else if (state === 'work') {
+    clearPartner(a)
+    if (announce) log(a, 'Travaille' + (a.role ? ` · ${a.role}` : ''))
+    if (a.room.t !== 'desk') go(a, target)
+    else { a.state = 'work' }
+  } else if (state === 'walk') {
+    if (announce) log(a, 'En déplacement')
+    if (!a.path.length) go(a, target !== a.room ? target : rooms[Math.abs(hash(a.id + 'w')) % rooms.length])
+  }
+  emit()
+}
+
+export function applyActivity(msg: {
+  type?: string; agentId?: string; state?: string; role?: string; bubble?: string
+}) {
+  if (!msg.agentId) return
+  const a = agents.find(x => x.id === msg.agentId)
+  if (!a) return
+  if (msg.role) a.role = msg.role
+  if (msg.bubble) {
+    const raw = String(msg.bubble).trim()
+    log(a, raw)
+    a.bubble = raw.length > 42 ? raw.slice(0, 40) + '…' : raw
+    a.bubbleUntil = performance.now() + 5200
+    a.talkUntil = Math.max(a.talkUntil, performance.now() + 4500)
+    if (a.state !== 'walk' && a.bvState !== 'zzz') a.state = 'collab'
+    if (a.promptPhase === 'sent') a.promptPhase = 'acked'
+  }
+  if (msg.state) {
+    /* real ack: activity after a sent prompt */
+    if (a.promptPhase === 'sent') a.promptPhase = 'acked'
+    applyBvState(a, msg.state as BvState, !msg.bubble)
+  }
+}
+
+function clearPartner(a: Agent) {
+  if (a.partnerId) {
+    const o = agents.find(x => x.id === a.partnerId)
+    if (o && o.partnerId === a.id) {
+      o.partnerId = null
+      o.announcedPartner = null
+    }
+  }
+  a.partnerId = null
+  a.announcedPartner = null
+}
+
+function isTalking(a: Agent, now: number) {
+  /* Real talk only — not ambient meeting-room collab from a stroll. */
+  return a.bvState === 'talk' || a.talkUntil > now
+}
+
+const COLLAB_SNIPS = ['…', 'D’accord', 'On regarde', 'OK', 'Hmm', 'Compte tenu…']
+
+function pairAgents(a: Agent, b: Agent, now: number) {
+  a.partnerId = b.id
+  b.partnerId = a.id
+  a.talkUntil = Math.max(a.talkUntil, now + 6000)
+  b.talkUntil = Math.max(b.talkUntil, now + 6000)
+  a.state = a.path.length ? 'walk' : 'collab'
+  b.state = b.path.length ? 'walk' : 'collab'
+  const key = a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id
+  if (a.announcedPartner !== key) {
+    a.announcedPartner = key
+    b.announcedPartner = key
+    log(a, 'Collabore avec ' + b.name)
+    log(b, 'Collabore avec ' + a.name)
+  }
+  if (!a.bubble || a.bubbleUntil < now) {
+    a.bubble = COLLAB_SNIPS[(Math.abs(hash(a.id + String(now | 0))) % COLLAB_SNIPS.length)]
+    a.bubbleUntil = now + 3200
+  }
+  if (!b.bubble || b.bubbleUntil < now) {
+    b.bubble = COLLAB_SNIPS[(Math.abs(hash(b.id + String(now | 0))) + 2) % COLLAB_SNIPS.length]
+    b.bubbleUntil = now + 3200
+  }
+}
+
+/** Walk toward peer inside the same room (short local path, no door hop). */
+function approachPeer(a: Agent, b: Agent) {
+  const dx = b.x - a.x, dz = b.z - a.z
+  const d = Math.hypot(dx, dz)
+  if (d < 0.05) return
+  a.yaw = Math.atan2(dx, dz)
+  if (d > 2.0 && !a.path.length) {
+    const keep = 1.35
+    const t = (d - keep) / d
+    a.path = [{ x: a.x + dx * t, z: a.z + dz * t }]
+    a.state = 'walk'
+  }
+}
+
+/**
+ * Pair talk/collab agents, send loners to Réunion, walk peers together.
+ * Uses real bvState / talkUntil / collab — no fake progress %.
+ */
+function resolveMeetups(now: number) {
+  const talkers = agents.filter(a => isTalking(a, now) && a.bvState !== 'zzz')
+  for (const a of agents) {
+    if (!isTalking(a, now) && a.partnerId) clearPartner(a)
+  }
+  for (const a of talkers) {
+    if (!a.partnerId) continue
+    const p = agents.find(o => o.id === a.partnerId)
+    if (!p || !isTalking(p, now)) {
+      a.partnerId = null
+      a.announcedPartner = null
+    }
+  }
+  const unpaired = talkers.filter(a => !a.partnerId)
+  for (let i = 0; i < unpaired.length; i++) {
+    const a = unpaired[i]
+    if (a.partnerId) continue
+    let b = unpaired.find(o => o !== a && !o.partnerId && o.room === a.room)
+    if (!b) b = unpaired.find(o => o !== a && !o.partnerId)
+    if (!b) break
+    pairAgents(a, b, now)
+  }
+  const seen = new Set<string>()
+  for (const a of talkers) {
+    if (!a.partnerId || seen.has(a.id)) continue
+    const b = agents.find(o => o.id === a.partnerId)
+    if (!b) continue
+    seen.add(a.id); seen.add(b.id)
+    if (a.room !== b.room) {
+      const meet = RM.meeting
+      if (a.room !== meet && !a.path.length) go(a, meet)
+      if (b.room !== meet && !b.path.length) go(b, meet)
+      continue
+    }
+    if (!a.path.length && !b.path.length) {
+      approachPeer(a, b)
+      approachPeer(b, a)
+      if (!a.path.length && !b.path.length) {
+        a.state = 'collab'
+        b.state = 'collab'
+        a.yaw = Math.atan2(b.x - a.x, b.z - a.z)
+        b.yaw = Math.atan2(a.x - b.x, a.z - b.z)
+      }
+    }
+  }
+  for (const a of talkers) {
+    if (a.partnerId) continue
+    if (a.bvState === 'talk' && a.room.id !== 'meeting' && !a.path.length) go(a, RM.meeting)
+  }
+}
+
+/** Active talk beams for Scene — unique unordered pairs. */
+export function talkPairs(): [Agent, Agent][] {
+  const now = performance.now()
+  const out: [Agent, Agent][] = []
+  const seen = new Set<string>()
+  for (const a of agents) {
+    if (!a.partnerId || !isTalking(a, now)) continue
+    const b = agents.find(o => o.id === a.partnerId)
+    if (!b || !isTalking(b, now)) continue
+    const key = a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push([a, b])
+  }
+  return out
+}
+
+/**
+ * Motion tick — mutates agents in place. Does NOT emit React updates;
+ * Scene drives transforms via useFrame/refs. UI subscribes via useSim
+ * only on discrete events (roster, logs, prompt, select).
+ */
+export function step(dt: number) {
+  dt = Math.min(dt, 0.033)
+  const now = performance.now()
+  for (const a of agents) {
+    if (a.path.length) {
+      const w = a.path[0]
+      const dx = w.x - a.x, dz = w.z - a.z
+      const d = Math.hypot(dx, dz)
+      const speed = 2.6 * (d < 0.9 ? 0.45 + 0.55 * (d / 0.9) : 1)
+      const st = Math.min(d, speed * dt)
+      if (d <= 0.04) {
+        a.x = w.x; a.z = w.z; a.path.shift()
+        if (!a.path.length) arrive(a)
+      } else {
+        a.x += dx / d * st; a.z += dz / d * st
+        const ty = Math.atan2(dx, dz)
+        let dy = ty - a.yaw
+        dy = Math.atan2(Math.sin(dy), Math.cos(dy))
+        a.yaw += dy * (1 - Math.exp(-dt * 5))
+      }
+    } else if (a.talkUntil > now || a.bvState === 'talk') {
+      a.state = 'collab'
+      if (a.bubbleUntil < now && (a.bvState === 'talk' || a.partnerId)) {
+        a.timer -= dt
+        if (a.timer <= 0) {
+          a.timer = 4 + Math.random() * 5
+          a.bubble = COLLAB_SNIPS[Math.floor(Math.random() * COLLAB_SNIPS.length)]
+          a.bubbleUntil = now + 2800
+          emit()
+        }
+      }
+    } else if (a.state === 'work' || a.state === 'collab') {
+      /* talk branch above already handled bvState==='talk' */
+      if (a.talkUntil && a.talkUntil <= now) {
+        a.state = a.bvState === 'zzz' ? 'sleep' : 'work'
+        a.talkUntil = 0
+        clearPartner(a)
+      }
+      /* ambient desk life: occasional stroll (honest — no fake task %) */
+      a.timer -= dt
+      if (a.timer <= 0) {
+        a.timer = 14 + Math.random() * 22
+        if (a.bvState !== 'zzz' && !a.partnerId && Math.random() < 0.4) {
+          const dest = rooms[Math.floor(Math.random() * rooms.length)]
+          if (dest !== a.room) go(a, dest)
+        }
+      }
+    } else if (a.state === 'sleep') {
+      a.timer = Math.max(a.timer, 8)
+    }
+  }
+  resolveMeetups(now)
+}
+
+/** Soft ¾ framing of an agent (used by select + Follow). Rig eases az/el/dist. */
+export function requestFrame(a: Agent | null, follow = false) {
+  if (!a) { ui.frame = null; return }
+  ui.frame = {
+    x: a.x,
+    z: a.z,
+    az: 0.78,
+    el: 0.46,
+    dist: follow ? 14 : 17,
+  }
+}
+
+export function selectAgent(a: Agent | null) {
+  ui.sel = a
+  ui.follow = false
+  requestFrame(a, false)
+  emit()
+}
+
+export function toggleFollow() {
+  ui.follow = !ui.follow
+  if (ui.follow && ui.sel) requestFrame(ui.sel, true)
+  else if (!ui.follow) ui.frame = null
+  emit()
+}
+
+export async function sendPrompt(prompt: string): Promise<boolean> {
+  const a = ui.sel
+  if (!a || !prompt.trim()) return false
+  const text = prompt.trim()
+  log(a, '← ' + (text.length > 48 ? text.slice(0, 48) + '…' : text))
+  a.promptPhase = 'sent'
+  a.bvState = 'talk'
+  a.talkUntil = performance.now() + 5200
+  a.bubble = '…'
+  a.bubbleUntil = performance.now() + 3000
+  a.state = a.path.length ? 'walk' : 'collab'
+  if (a.room.id !== 'meeting' && !a.path.length) go(a, RM.meeting)
+  ui.promptStatus = 'Envoi…'
+  emit()
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const tok = typeof window !== 'undefined' ? window.__VILLAGE_PROMPT_TOKEN__ : undefined
+    if (tok) headers['X-Village-Token'] = tok
+    const res = await fetch('/api/prompt', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id: a.id, name: a.name, prompt: text }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || data.ok === false) {
+      a.promptPhase = 'silent'
+      ui.promptStatus = data.detail || 'Webhook indisponible'
+      log(a, '…?')
+      emit()
+      return false
+    }
+    /* Stay sent until WS bubble/state proves activity — no fake timer ack. */
+    a.promptPhase = 'sent'
+    ui.promptStatus = 'Envoyé'
+    emit()
+    setTimeout(() => {
+      if (ui.promptStatus === 'Envoyé') { ui.promptStatus = ''; emit() }
+    }, 1800)
+    return true
+  } catch {
+    a.promptPhase = 'silent'
+    ui.promptStatus = 'Hors ligne'
+    log(a, 'hors ligne')
+    emit()
+    return false
+  }
+}
+
+/** Live bridge: roster + activity from botvillage (/api/bots + /ws). */
+export function connectLive() {
+  fetch('/api/bots').then(r => r.json()).then(d => {
+    if (d && Array.isArray(d.bots)) syncRoster(d.bots)
+  }).catch(() => {})
+
+  fetch('/api/skills').then(r => r.json()).then(d => {
+    skillBooks.length = 0
+    if (d && Array.isArray(d.skills)) {
+      const list = d.skills as SkillJSON[]
+      /* user → managed → plugin already ordered by API; cap display */
+      for (const s of list.slice(0, SKILL_DISPLAY_CAP)) skillBooks.push(s)
+    }
+    emit()
+  }).catch(() => { skillBooks.length = 0; emit() })
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  let ws: WebSocket | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
+
+  const open = () => {
+    ws = new WebSocket(proto + '://' + location.host + '/ws')
+    ws.onopen = () => { link = 'live'; emit() }
+    ws.onmessage = e => {
+      let msg: any
+      try { msg = JSON.parse(e.data) } catch { return }
+      if (msg.type === 'roster' && Array.isArray(msg.bots)) syncRoster(msg.bots)
+      else if (msg.type === 'state') applyActivity(msg)
+    }
+    ws.onclose = () => {
+      link = 'down'
+      emit()
+      timer = setTimeout(open, 1200)
+    }
+  }
+  open()
+  return () => {
+    if (timer) clearTimeout(timer)
+    ws?.close()
+  }
+}

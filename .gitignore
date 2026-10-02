@@ -1,0 +1,20 @@
+# secrets / local runtime
+webhook.json
+wakes.jsonl
+*.log
+demo-data/
+
+# binaries
+botvillage
+botvillage-*
+*.exe
+
+# frontend build deps / output (static/ is committed as embedded SPA)
+web/node_modules/
+web/dist/
+
+# OS / editor
+.DS_Store
+*.swp
+.env
+.env.*
