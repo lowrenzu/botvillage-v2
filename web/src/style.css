@@ -867,109 +867,174 @@ button { font: inherit; }
 }
 .frieze-chip.kind-talk b { color: #3d7ab8; }
 
-/* Speech bubble = transcript-only, ONE chrome for every bot.
-   Soft charcoal glass (matches Elon soft charcoal) — not flat white / not neon. */
+/* Speech bubble = transcript-only, ONE chip for every bot.
+   Compact pill (bot-scale), not a card. Hover/pointer expands the line.
+   Work pulses. Idle fades. No comic tail. */
 .speech-bubble-html {
   width: max-content;
-  max-width: 236px;
-  flex: 0 0 auto;
+  max-width: 220px;
   pointer-events: none;
+  display: block;
 }
 .speech-bubble {
-  --sb-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --sb-ease-in: cubic-bezier(0.4, 0, 0.2, 1);
+  --sb-out: cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
-  display: inline-block;
-  width: max-content;
-  min-width: 72px;
-  max-width: 236px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   box-sizing: border-box;
-  padding: 11px 15px 12px;
-  border-radius: 16px 16px 16px 16px;
-  /* soft charcoal frosted — premium depth */
-  background:
-    linear-gradient(155deg,
-      rgba(58, 54, 50, 0.94) 0%,
-      rgba(36, 33, 30, 0.92) 55%,
-      rgba(28, 26, 24, 0.94) 100%) !important;
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  border: 1px solid rgba(255, 250, 242, 0.14);
-  box-shadow:
-    0 1px 0 rgba(255, 252, 245, 0.14) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.35) inset,
-    0 14px 36px rgba(12, 10, 8, 0.42),
-    0 4px 10px rgba(12, 10, 8, 0.22);
-  color: rgba(255, 252, 245, 0.96) !important;
-  font: 600 12.5px/1.45 "Plus Jakarta Sans", system-ui, sans-serif;
-  letter-spacing: -0.015em;
+  max-width: 64px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  color: rgba(255, 252, 248, 0.96);
+  font: 500 13px/1.25 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  letter-spacing: -0.025em;
   text-align: left;
   writing-mode: horizontal-tb;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  /* translucent charcoal + white frost, soft gradient rim */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.05)) padding-box,
+    linear-gradient(155deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.10) 46%, rgba(196, 192, 186, 0.22)) border-box;
+  background-color: rgba(38, 36, 34, 0.42);
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  border: 1px solid transparent;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.28) inset,
+    0 4px 12px rgba(16, 14, 12, 0.20);
   pointer-events: none;
-  /* enter/exit rest: below + faded */
-  transform: translate3d(0, 12px, 0) scale(0.94);
-  visibility: hidden;
   opacity: 0;
-  filter: blur(2px);
+  visibility: hidden;
+  transform: translate3d(0, 6px, 0) scale(0.92);
+  filter: blur(1px);
   transition:
-    opacity 0.34s var(--sb-ease-in),
-    transform 0.38s var(--sb-ease-in),
-    filter 0.34s var(--sb-ease-in),
-    visibility 0s linear 0.38s;
-  will-change: opacity, transform, filter;
+    opacity 200ms var(--sb-out),
+    transform 220ms var(--sb-out),
+    max-width 240ms var(--sb-out),
+    padding 220ms var(--sb-out),
+    border-radius 220ms var(--sb-out),
+    filter 180ms var(--sb-out),
+    box-shadow 220ms var(--sb-out),
+    visibility 0s linear 220ms;
+  will-change: opacity, transform, max-width;
 }
 .speech-bubble.is-on {
-  visibility: visible;
   opacity: 1;
+  visibility: visible;
   transform: translate3d(0, 0, 0) scale(1);
-  filter: blur(0);
+  filter: none;
+  pointer-events: auto;
   transition:
-    opacity 0.32s var(--sb-ease-out),
-    transform 0.4s var(--sb-ease-out),
-    filter 0.28s var(--sb-ease-out),
+    opacity 200ms var(--sb-out),
+    transform 220ms var(--sb-out),
+    max-width 240ms var(--sb-out),
+    padding 220ms var(--sb-out),
+    border-radius 220ms var(--sb-out),
+    filter 180ms var(--sb-out),
+    box-shadow 220ms var(--sb-out),
+    visibility 0s linear 0s;
+  animation: sb-float 2.6s ease-in-out infinite;
+}
+/* Idle: fade the chip away — never a sitting card. */
+.speech-bubble.is-on.is-idle {
+  opacity: 0;
+  transform: translate3d(0, 4px, 0) scale(0.88);
+  filter: blur(1.2px);
+  pointer-events: none;
+  animation: none;
+}
+/* Work: subtle rim pulse, still the same chip. */
+.speech-bubble.is-on.is-work {
+  animation: sb-pulse 1.7s ease-in-out infinite;
+}
+.speech-bubble.is-on:hover,
+.speech-bubble.is-on.is-hot,
+.speech-bubble.is-on.is-idle.is-hot {
+  opacity: 1;
+  visibility: visible;
+  filter: none;
+  pointer-events: auto;
+  max-width: 220px;
+  padding: 7px 12px 7px 10px;
+  border-radius: 16px;
+  transform: translate3d(0, -2px, 0) scale(1);
+  animation: none;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.32) inset,
+    0 8px 20px rgba(16, 14, 12, 0.26);
+  transition:
+    opacity 180ms var(--sb-out),
+    transform 200ms var(--sb-out),
+    max-width 240ms var(--sb-out),
+    padding 200ms var(--sb-out),
+    border-radius 200ms var(--sb-out),
+    filter 160ms var(--sb-out),
+    box-shadow 200ms var(--sb-out),
     visibility 0s linear 0s;
 }
+.speech-bubble::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: 0 0 5px;
+  background: rgba(255, 252, 248, 0.78);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.10);
+}
+.speech-bubble.is-work::before {
+  background: rgba(226, 236, 224, 0.95);
+  animation: sb-dot 1.7s ease-in-out infinite;
+}
 .speech-bubble-text {
+  min-width: 0;
+  max-width: 42px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(90deg, #000 62%, transparent 100%);
+  mask-image: linear-gradient(90deg, #000 62%, transparent 100%);
+}
+.speech-bubble-text:empty { display: none; }
+.speech-bubble:hover .speech-bubble-text,
+.speech-bubble.is-hot .speech-bubble-text {
+  max-width: 188px;
+  white-space: normal;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   line-clamp: 3;
   overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 206px;
-  max-height: 4.35em; /* 3 lines fallback */
+  -webkit-mask-image: linear-gradient(180deg, #000 68%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 68%, transparent 100%);
 }
-.speech-bubble-text:empty { display: none; }
-/* soft charcoal pointer — shared chrome */
-.speech-bubble::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 252, 245, 0.08) 0%, transparent 42%);
-  opacity: 0.9;
+@keyframes sb-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -3px; }
 }
-.speech-bubble::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -6px;
-  width: 11px;
-  height: 11px;
-  margin-left: -5.5px;
-  background: rgba(36, 33, 30, 0.94) !important;
-  border-right: 1px solid rgba(255, 250, 242, 0.12);
-  border-bottom: 1px solid rgba(255, 250, 242, 0.12);
-  box-shadow: 2px 3px 8px rgba(12, 10, 8, 0.28);
-  transform: rotate(45deg);
-  border-radius: 2px;
+@keyframes sb-pulse {
+  0%, 100% {
+    translate: 0 0;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.26) inset,
+      0 4px 10px rgba(16, 14, 12, 0.18);
+  }
+  50% {
+    translate: 0 -2px;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.40) inset,
+      0 0 0 3px rgba(255, 255, 255, 0.10),
+      0 8px 16px rgba(16, 14, 12, 0.24);
+  }
 }
-
-
+@keyframes sb-dot {
+  0%, 100% { transform: scale(1); opacity: 0.75; }
+  50% { transform: scale(1.35); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .speech-bubble,
+  .speech-bubble.is-on,
+  .speech-bubble.is-work::before { animation: none !important; }
+}
 
 img.av, img.agent-av { object-fit: cover; display: block; padding: 0; border: 0; }
 img.av { width: 26px; height: 26px; border-radius: 50%; }

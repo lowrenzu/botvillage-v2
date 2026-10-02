@@ -22,7 +22,7 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
  const letter=(a.name.trim()[0]||'?').toUpperCase()
  const band=useMemo(()=>initTex(letter),[letter])
  const [avMap,setAvMap]=useState<THREE.Texture|null>(null)
- const [hovered,setHovered]=useState(false)
+ const hot=useRef(false)
  const vis=useRef({x:a.x,z:a.z,by:.1,bz:0,bx:0,walk:0,lid:0,dim:1})
  const proj=useMemo(()=>new THREE.Vector3(),[])
  /* no useSim — motion + tag state via useFrame/refs (P1) */
@@ -76,11 +76,18 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
    tagState.current.textContent=ST_FR[tagKey]||tagKey
   }
   /* Speech bubble: class toggle only — keep last text while CSS fade/slide exits (don't wipe textContent on off). */
+  /* Chip, not a card: live transcript only. Idle fades. Work pulses. Pointer sets is-hot. */
   if(bubbleWrap.current){
-   const on=!!(a.bubble&&a.bubbleUntil>performance.now())
-   if(!on&&a.bubble){a.bubble='';a.bubbleUntil=0}
-   bubbleWrap.current.classList.toggle('is-on', on)
-   if(on&&bubbleText.current){
+   const now=performance.now()
+   const live=!!(a.bubble&&a.bubbleUntil>now)
+   if(!live&&a.bubble){a.bubble='';a.bubbleUntil=0}
+   const el=bubbleWrap.current
+   const idle=a.bvState!=='work'&&a.bvState!=='talk'&&a.bvState!=='walk'
+   el.classList.toggle('is-on', live)
+   el.classList.toggle('is-idle', live&&idle)
+   el.classList.toggle('is-work', live&&a.bvState==='work')
+   el.classList.toggle('is-hot', hot.current)
+   if(live&&bubbleText.current){
     const want=a.bubble||''
     if(bubbleText.current.textContent!==want) bubbleText.current.textContent=want
    }
@@ -99,8 +106,8 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
  /* ALWAYS show name+state from /api/bots — never gate on select/hover */
  const showTag=true
  return <group ref={g} scale={1.4}
-  onPointerOver={e=>{e.stopPropagation();setHovered(true);ui.hoverAgent=a}}
-  onPointerOut={()=>{setHovered(false);if(ui.hoverAgent===a)ui.hoverAgent=null}}>
+  onPointerOver={e=>{e.stopPropagation();hot.current=true;ui.hoverAgent=a}}
+  onPointerOut={()=>{hot.current=false;if(ui.hoverAgent===a)ui.hoverAgent=null}}>
   <group ref={body}>
    <mesh position={[0,.85,0]} scale={[1,1.25,1]} castShadow onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX)selectAgent(a)}}>
     <sphereGeometry args={[.38,24,16]}/><meshStandardMaterial color={a.color} roughness={.35} metalness={.04}/>
@@ -136,7 +143,7 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
    {avMap&&<mesh position={[0,.52,.5]}><circleGeometry args={[.2,20]}/><meshBasicMaterial map={avMap} toneMapped={false}/></mesh>}
   </group>
   <mesh ref={ring} rotation={[-Math.PI/2,0,0]} position={[0,.04,0]}><ringGeometry args={[.72,selected?.88:.8,32]}/><meshBasicMaterial color={a.color} transparent side={THREE.DoubleSide}/></mesh>
-  {/* Speech bubble (transcript) — same markup/CSS for every agent; show via .is-on from useFrame */}
+  {/* Transcript chip — same markup for every agent. .is-on / .is-work / .is-idle / .is-hot from useFrame */}
   <Html position={[0,2.55,0]} center zIndexRange={[50,40]} className="speech-bubble-html">
    <div ref={bubbleWrap} className="speech-bubble" aria-hidden>
     <div ref={bubbleText} className="speech-bubble-text"></div>
