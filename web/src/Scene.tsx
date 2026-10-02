@@ -21,7 +21,7 @@ function Rig(){
  /* camera: overview fits all 6 rooms; viewOffset shifts optical center into left of HUD */
  const {gl,camera,size}=useThree()
  const HOME={az:.82,el:.48,dist:46} /* classic ¾ overview */
- const s=useRef({az:HOME.az,el:HOME.el,dist:HOME.dist,distWant:HOME.dist,tgt:new THREE.Vector3(),vaz:0,vel:0,dragging:false,booted:false})
+ const s=useRef({az:HOME.az,el:HOME.el,dist:HOME.dist,distWant:HOME.dist,tgt:new THREE.Vector3(),vaz:0,vel:0,vzoom:0,dragging:false,booted:false})
  const want=useMemo(()=>new THREE.Vector3(),[]),camWant=useMemo(()=>new THREE.Vector3(),[])
  useEffect(()=>{const el=gl.domElement,v=s.current;let d=false
   const pts=new Map<number,{x:number,y:number}>()
@@ -32,15 +32,18 @@ function Rig(){
    d=true;v.dragging=true;v.vaz=0;v.vel=0;ui.moved=0}
   const up=(e:PointerEvent)=>{pts.delete(e.pointerId);pinch=pts.size>=2?span():0;if(pts.size===0){d=false;v.dragging=false}}
   const mv=(e:PointerEvent)=>{if(!pts.has(e.pointerId))return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY})
-   if(pts.size>=2&&pinch>0){const dist=span();if(dist>0){v.distWant=clamp(v.distWant*(pinch/dist),14,80);pinch=dist;if(ui.frame)ui.frame.dist=v.distWant}return}
+   if(pts.size>=2&&pinch>0){const dist=span();if(dist>0){v.distWant=clamp(v.distWant*(pinch/dist),12,85);v.vzoom=0;pinch=dist;if(ui.frame)ui.frame.dist=v.distWant}return}
    if(!d)return;ui.moved+=Math.abs(e.movementX)+Math.abs(e.movementY)
    const daz=-e.movementX*.0045,del=e.movementY*.0038
    v.az+=daz;v.el=clamp(v.el+del,.28,1.25)
-   v.vaz=daz*78;v.vel=del*78
+   v.vaz=daz*52;v.vel=del*52
    if(ui.moved>CLICK_MOVE_MAX)ui.frame=null}
   const wh=(e:WheelEvent)=>{e.preventDefault()
-   const step=Math.sign(e.deltaY)*Math.min(Math.abs(e.deltaY),120)*.0009
-   v.distWant=clamp(v.distWant*Math.exp(step||Math.sign(e.deltaY)*.07),14,80)
+   /* zoom polish: softer steps + coast via vzoom */
+   const mag=Math.min(Math.abs(e.deltaY),160)
+   const step=Math.sign(e.deltaY)*mag*.00055
+   v.vzoom+=step||Math.sign(e.deltaY)*.045
+   v.vzoom=clamp(v.vzoom,-.22,.22)
    if(ui.frame)ui.frame.dist=v.distWant}
   el.addEventListener('pointerdown',dn);el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);el.addEventListener('wheel',wh,{passive:false})
   return()=>{el.removeEventListener('pointerdown',dn);el.removeEventListener('pointermove',mv);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);el.removeEventListener('wheel',wh)
@@ -55,9 +58,16 @@ function Rig(){
   if(size.width>720)cam.setViewOffset(size.width,size.height,railW*.55,0,size.width,size.height)
   else cam.clearViewOffset()
   if(!v.dragging){v.az+=v.vaz*dt;v.el=clamp(v.el+v.vel*dt,.28,1.15)
-   /* softer inertia coast after drag */
-   const damp=Math.exp(-dt*1.15);v.vaz*=damp;v.vel*=damp
-   if(Math.abs(v.vaz)<1e-4)v.vaz=0;if(Math.abs(v.vel)<1e-4)v.vel=0}
+   /* longer soft inertia coast after drag (Elon cam polish) */
+   const damp=Math.exp(-dt*.72);v.vaz*=damp;v.vel*=damp
+   if(Math.abs(v.vaz)<2e-4)v.vaz=0;if(Math.abs(v.vel)<2e-4)v.vel=0}
+  /* zoom inertia: integrate vzoom into distWant, then ease dist */
+  if(Math.abs(v.vzoom)>1e-5){
+   v.distWant=clamp(v.distWant*Math.exp(v.vzoom*dt*60*.016),12,85)
+   v.vzoom*=Math.exp(-dt*3.2)
+   if(Math.abs(v.vzoom)<1e-4)v.vzoom=0
+   if(ui.frame)ui.frame.dist=v.distWant
+  }
   const fr=ui.frame
   if(fr){const k=1-Math.exp(-dt*.78) /* slower ease into ¾ frame */
    let daz=fr.az-v.az;daz=Math.atan2(Math.sin(daz),Math.cos(daz))
@@ -68,9 +78,9 @@ function Rig(){
    want.set(fr.x,0,fr.z)
   }else{
    want.set(0,0,0)
-   if(ui.follow&&ui.sel){want.set(ui.sel.x,0,ui.sel.z);v.distWant+=(14-v.distWant)*(1-Math.exp(-dt*.95))}
+   if(ui.follow&&ui.sel){want.set(ui.sel.x,0,ui.sel.z);v.distWant+=(16-v.distWant)*(1-Math.exp(-dt*.85))}
   }
-  v.dist+=(v.distWant-v.dist)*(1-Math.exp(-dt*2.4))
+  v.dist+=(v.distWant-v.dist)*(1-Math.exp(-dt*1.85))
   if(!v.booted){v.booted=true;v.tgt.copy(want);v.dist=v.distWant
    camWant.set(v.tgt.x+v.dist*Math.sin(v.az)*Math.cos(v.el),v.dist*Math.sin(v.el),v.tgt.z+v.dist*Math.cos(v.az)*Math.cos(v.el))
    camera.position.copy(camWant);camera.lookAt(v.tgt);return}
@@ -80,7 +90,7 @@ function Rig(){
  return null}
 
 const Box=({p,a,c,e,r=0,ei=1,m=.1,ro=.55,shadow=false}:{p:V3;a:V3;c:string;e?:string;r?:number;ei?:number;m?:number;ro?:number;shadow?:boolean})=>
- <mesh position={p} rotation={[0,r,0]} castShadow={shadow} receiveShadow={shadow}><boxGeometry args={a}/><meshStandardMaterial color={c} emissive={e||'#000'} emissiveIntensity={ei} roughness={ro} metalness={m}/></mesh>
+ <mesh position={p} rotation={[0,r,0]} castShadow={shadow} receiveShadow={shadow}><boxGeometry args={a}/><meshStandardMaterial color={c} emissive={e||'#1a1816'} emissiveIntensity={ei} roughness={ro} metalness={m}/></mesh>
 const AL='#d3d6da',GR='#8f9299',WH='#f2f0ec',WN='#6b5646'
 
 const Plant=({p}:{p:V3})=><group position={p}>
@@ -88,7 +98,7 @@ const Plant=({p}:{p:V3})=><group position={p}>
  {[[0,1.1,0,.5],[.2,.8,.1,.32],[-.17,.85,-.1,.34]].map(([x,y,z,r],i)=><mesh key={i} position={[x,y,z]}><sphereGeometry args={[r,12,10]}/><meshStandardMaterial color="#4f8a62" roughness={.8}/></mesh>)}</group>
 const cvs=(w:number,h:number,f:(x:CanvasRenderingContext2D)=>void)=>{const c=document.createElement('canvas');c.width=w;c.height=h;f(c.getContext('2d')!);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t}
 const scr={
- code:cvs(256,160,x=>{x.fillStyle='#0f1420';x.fillRect(0,0,256,160);for(let i=0;i<18;i++){let px=12+(Math.random()*3|0)*12;for(let k=0,n=1+Math.random()*6|0;k<n;k++){const w=8+Math.random()*28;x.fillStyle=['#7aa2f7','#9ece6a','#e0af68','#bb9af7','#c0caf5'][Math.random()*5|0];x.globalAlpha=.85;x.fillRect(px,5+i*8.4,w,3.5);px+=w+4}}x.globalAlpha=1}),
+ code:cvs(256,160,x=>{x.fillStyle='#1e2430';x.fillRect(0,0,256,160);for(let i=0;i<18;i++){let px=12+(Math.random()*3|0)*12;for(let k=0,n=1+Math.random()*6|0;k<n;k++){const w=8+Math.random()*28;x.fillStyle=['#7aa2f7','#9ece6a','#e0af68','#bb9af7','#c0caf5'][Math.random()*5|0];x.globalAlpha=.85;x.fillRect(px,5+i*8.4,w,3.5);px+=w+4}}x.globalAlpha=1}),
  chart:cvs(256,160,x=>{x.fillStyle='#eceff3';x.fillRect(0,0,256,160);x.fillStyle='#fff';[[8,8,116,70],[136,8,112,70],[8,88,240,64]].forEach(([a,b,c,d])=>{x.beginPath();x.roundRect(a,b,c,d,6);x.fill()})
   for(let i=0;i<10;i++){const h=10+Math.random()*45;x.fillStyle=i%4?'#b9d2ee':'#5e9bd6';x.fillRect(16+i*10,72-h,7,h)}
   x.strokeStyle='#5cb98f';x.lineWidth=2;x.beginPath();for(let i=0;i<14;i++){const px=148+i*7,py=58-Math.sin(i/2.4)*14-i;i?x.lineTo(px,py):x.moveTo(px,py)}x.stroke()
@@ -98,7 +108,7 @@ const scr={
 scr.code.wrapT=THREE.RepeatWrapping
 const keysTex=cvs(128,40,x=>{x.fillStyle='#eceef0';x.fillRect(0,0,128,40);x.fillStyle='#c4c7cc';for(let r=0;r<4;r++)for(let c=0;c<10;c++)x.fillRect(4+c*12,4+r*9,10,7)})
 const KIND:Record<string,keyof typeof scr>={grok:'chart',build:'code',bot:'chart',meeting:'wall',competences:'code',skills:'wall'}
-const labScr=cvs(256,160,x=>{x.fillStyle='#0c1016';x.fillRect(0,0,256,160)
+const labScr=cvs(256,160,x=>{x.fillStyle='#1e2430';x.fillRect(0,0,256,160)
  x.strokeStyle='rgba(180,190,205,.25)';x.strokeRect(6,6,244,148)
  x.fillStyle='rgba(140,160,190,.08)';x.fillRect(6,6,244,20)
  x.fillStyle='#a8b4c4';x.font='600 12px monospace';x.fillText('COMPÉTENCES · NODES',14,20)
@@ -113,7 +123,7 @@ const Workstation=({kind}:{kind:keyof typeof scr})=><group>
  <RoundedBox args={[.16,.56,.05]} radius={.02} position={[0,1.2,-.23]} rotation={[-.1,0,0]}><Metal/></RoundedBox>
  <group position={[0,1.66,-.24]} rotation={[-.07,0,0]}>
   <RoundedBox args={[1.56,.92,.05]} radius={.035} smoothness={4} castShadow><Metal c="#c9ccd1" r={.3}/></RoundedBox>
-  <RoundedBox args={[1.52,.88,.01]} radius={.03} position={[0,0,.027]}><meshStandardMaterial color="#050506" roughness={.1}/></RoundedBox>
+  <RoundedBox args={[1.52,.88,.01]} radius={.03} position={[0,0,.027]}><meshStandardMaterial color="#2c3036" roughness={.1}/></RoundedBox>
   <mesh position={[0,0,.034]}><planeGeometry args={[1.44,.8]}/><meshBasicMaterial map={scr[kind]} toneMapped={false} color="#d8dce2"/></mesh>
   <mesh position={[0,0,.037]}><planeGeometry args={[1.52,.88]}/><meshStandardMaterial color="#fff" transparent opacity={.07} metalness={1} roughness={.04} depthWrite={false}/></mesh>
  </group>
@@ -173,31 +183,31 @@ const Doorway=({b}:{b:number})=>{
   </group>
 }
 
-/* floor etch — engraved plaque, high-contrast readable from ¾ cam */
+/* floor etch — larger + higher contrast for ¾ cam readability (Elon UI) */
 const etchLabel=(name:string,accent:string)=>{const c=document.createElement('canvas');c.width=1024;c.height=256;const x=c.getContext('2d')!
  x.clearRect(0,0,1024,256)
- /* recessed plate */
- x.fillStyle='rgba(36,32,28,.42)';x.beginPath();x.roundRect(28,36,968,184,18);x.fill()
- x.strokeStyle='rgba(12,10,8,.55)';x.lineWidth=3;x.beginPath();x.roundRect(30,38,964,180,16);x.stroke()
- x.strokeStyle='rgba(255,248,235,.22)';x.lineWidth=2;x.beginPath();x.roundRect(36,44,952,168,14);x.stroke()
+ /* recessed plate — darker fill for contrast on parquet */
+ x.fillStyle='rgba(22,18,14,.62)';x.beginPath();x.roundRect(20,28,984,200,20);x.fill()
+ x.strokeStyle='rgba(8,6,4,.7)';x.lineWidth=4;x.beginPath();x.roundRect(22,30,980,196,18);x.stroke()
+ x.strokeStyle='rgba(255,248,235,.38)';x.lineWidth=2.5;x.beginPath();x.roundRect(30,38,964,180,14);x.stroke()
  /* accent pip */
- x.fillStyle=accent;x.globalAlpha=.92;x.beginPath();x.arc(96,128,10,0,Math.PI*2);x.fill();x.globalAlpha=1
- x.fillStyle='rgba(255,255,255,.35)';x.beginPath();x.arc(93,124,3.5,0,Math.PI*2);x.fill()
- x.font='700 72px "Plus Jakarta Sans", system-ui, sans-serif'
+ x.fillStyle=accent;x.globalAlpha=.95;x.beginPath();x.arc(88,128,12,0,Math.PI*2);x.fill();x.globalAlpha=1
+ x.fillStyle='rgba(255,255,255,.45)';x.beginPath();x.arc(84,123,4,0,Math.PI*2);x.fill()
+ x.font='800 96px "Plus Jakarta Sans", system-ui, sans-serif'
  x.textAlign='center';x.textBaseline='middle'
- x.letterSpacing='0.08em' as any
+ x.letterSpacing='0.1em' as any
  const label=name.toUpperCase()
- /* carved shadow + highlight + ink */
- x.fillStyle='rgba(255,250,240,.35)';x.fillText(label,514,118)
- x.fillStyle='rgba(8,6,4,.72)';x.fillText(label,510,134)
- x.fillStyle='rgba(28,24,20,.92)';x.fillText(label,512,126)
+ /* carved shadow + highlight + near-black ink */
+ x.fillStyle='rgba(255,252,245,.5)';x.fillText(label,516,112)
+ x.fillStyle='rgba(4,2,0,.85)';x.fillText(label,508,140)
+ x.fillStyle='rgba(252,248,240,.96)';x.fillText(label,512,126)
  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;t.premultiplyAlpha=true;return t}
 const RoomLabel=({r}:{r:Room})=>{
  const map=useMemo(()=>etchLabel(r.n,r.c),[r.n,r.c])
- return <mesh rotation={[-Math.PI/2,0,0]} position={[r.x,.11,r.z]} receiveShadow
+ return <mesh rotation={[-Math.PI/2,0,0]} position={[r.x,.14,r.z]} receiveShadow
   onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel)go(ui.sel,r)}}>
-  <planeGeometry args={[5.8,1.45]}/>
-  <meshStandardMaterial map={map} transparent depthWrite={false} roughness={.88} metalness={.08} polygonOffset polygonOffsetFactor={-2}/>
+  <planeGeometry args={[6.6,1.7]}/>
+  <meshStandardMaterial map={map} transparent depthWrite={false} roughness={.86} metalness={.06} polygonOffset polygonOffsetFactor={-2}/>
  </mesh>}
 
 const initTex=(letter:string)=>{
@@ -458,9 +468,9 @@ function ServerUnit({y,w=1.9}:{y:number;w?:number}){
   const leds=[[-w*.42,'#6ee7a0'],[-w*.32,'#6ee7a0'],[-w*.22,'#94a3b8'],[-w*.08,'#64748b'],[w*.28,'#c8d4e0'],[w*.4,'#c8d4e0']] as [number,string][]
   return <group position={[0,y,0]}>
     <RoundedBox args={[w,.34,.72]} radius={.01} castShadow>
-      <meshStandardMaterial color="#14181e" metalness={.62} roughness={.32}/>
+      <meshStandardMaterial color="#2e343c" metalness={.62} roughness={.32}/>
     </RoundedBox>
-    <Box p={[0,0,.355]} a={[w-.08,.28,.025]} c="#0a0c10" m={.35} ro={.4}/>
+    <Box p={[0,0,.355]} a={[w-.08,.28,.025]} c="#2e343c" m={.35} ro={.4}/>
     {[-.09,-.03,.03,.09].map((dy,i)=>(
       <mesh key={i} position={[0,dy,.37]}>
         <boxGeometry args={[w*.62,.014,.01]}/>
@@ -480,7 +490,7 @@ function ServerRack({p,r=0,units=9}:{p:V3;r?:number;units?:number}){
   const H=3.4, W=2.2, D=.95
   return <group position={p} rotation={[0,r,0]}>
     <RoundedBox args={[W,H,D]} radius={.025} position={[0,H/2,0]} castShadow receiveShadow>
-      <meshStandardMaterial color="#0c1016" metalness={.55} roughness={.32}/>
+      <meshStandardMaterial color="#2a3038" metalness={.55} roughness={.32}/>
     </RoundedBox>
     <Box p={[-W/2+.05,H/2,D/2-.02]} a={[.08,H-.1,.05]} c={AL} m={.75} ro={.22}/>
     <Box p={[W/2-.05,H/2,D/2-.02]} a={[.08,H-.1,.05]} c={AL} m={.75} ro={.22}/>
@@ -595,7 +605,7 @@ function LabRoom({r}:{r:Room}){
     <SkillBoard title="Compétences" skills={byVotes('skills', skillBooks)} p={[0,0,b*4.35]} r={b>0?Math.PI:0}/>
     <group position={[-3.45,0,b*3.5]}>
       <RoundedBox args={[1.2,1.5,.65]} radius={.015} position={[0,.75,0]} castShadow>
-        <meshStandardMaterial color="#0c1016" metalness={.55} roughness={.3}/>
+        <meshStandardMaterial color="#2a3038" metalness={.55} roughness={.3}/>
       </RoundedBox>
       {[0,1,2,3].map(i=>(
         <mesh key={i} position={[0,.38+i*.28,.34]}>
@@ -753,10 +763,10 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
     <capsuleGeometry args={[.28,.42,6,12]}/><meshStandardMaterial color={a.color} roughness={.45} metalness={.03}/>
    </mesh>
    <mesh position={[0,.62,.16]}>
-    <boxGeometry args={[.34,.08,.06]}/><meshStandardMaterial color="#1c1a17" roughness={.5}/>
+    <boxGeometry args={[.34,.08,.06]}/><meshStandardMaterial color="#3a3632" roughness={.5}/>
    </mesh>
    <mesh position={[0,.5,.3]}>
-    <boxGeometry args={[.12,.08,.02]}/><meshStandardMaterial color="#1c1a17" roughness={.4} metalness={.2}/>
+    <boxGeometry args={[.12,.08,.02]}/><meshStandardMaterial color="#3a3632" roughness={.4} metalness={.2}/>
    </mesh>
    {([[-.34,.58,0],[.34,.58,0]] as [number,number,number][]).map((pos,i)=><mesh key={'sh'+i} position={pos} castShadow>
     <sphereGeometry args={[.1,12,10]}/><meshStandardMaterial color={a.color} roughness={.4}/>
@@ -765,18 +775,18 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
     <capsuleGeometry args={[.07,.28,4,8]}/><meshStandardMaterial color={a.color} roughness={.5}/>
    </mesh>)}
    {([[-.12,.08,.04],[.12,.08,.04]] as [number,number,number][]).map((pos,i)=><mesh key={'ft'+i} position={pos} castShadow>
-    <capsuleGeometry args={[.07,.1,4,8]}/><meshStandardMaterial color="#1c1a17" roughness={.6}/>
+    <capsuleGeometry args={[.07,.1,4,8]}/><meshStandardMaterial color="#3a3632" roughness={.6}/>
    </mesh>)}
    <mesh position={[0,.78,0]} scale={[1.015,1.25,1.015]}>
     <sphereGeometry args={[.55,24,12,0,Math.PI*2,Math.PI/2-0.22,0.44]}/>
     <meshStandardMaterial map={band} transparent roughness={.45} metalness={.08} depthWrite={false}/>
    </mesh>
-   <mesh position={[0,1.16,.34]}><boxGeometry args={[.5,.05,.08]}/><meshStandardMaterial color="#14161a" roughness={.4}/></mesh>
-   <mesh position={[0,1.05,.4]}><boxGeometry args={[.72,.32,.24]}/><meshStandardMaterial color="#14161a" roughness={.15} metalness={.35}/></mesh>
+   <mesh position={[0,1.16,.34]}><boxGeometry args={[.5,.05,.08]}/><meshStandardMaterial color="#2e3238" roughness={.4}/></mesh>
+   <mesh position={[0,1.05,.4]}><boxGeometry args={[.72,.32,.24]}/><meshStandardMaterial color="#2e3238" roughness={.15} metalness={.35}/></mesh>
    <mesh ref={eyeL} position={[-.16,1.05,.53]}><boxGeometry args={[.18,.16,.03]}/><meshBasicMaterial color={a.color}/></mesh>
    <mesh ref={eyeR} position={[.16,1.05,.53]}><boxGeometry args={[.18,.16,.03]}/><meshBasicMaterial color={a.color}/></mesh>
-   <mesh ref={lidL} position={[-.16,1.05,.545]}><boxGeometry args={[.19,.16,.02]}/><meshStandardMaterial color="#14161a" roughness={.3}/></mesh>
-   <mesh ref={lidR} position={[.16,1.05,.545]}><boxGeometry args={[.19,.16,.02]}/><meshStandardMaterial color="#14161a" roughness={.3}/></mesh>
+   <mesh ref={lidL} position={[-.16,1.05,.545]}><boxGeometry args={[.19,.16,.02]}/><meshStandardMaterial color="#2e3238" roughness={.3}/></mesh>
+   <mesh ref={lidR} position={[.16,1.05,.545]}><boxGeometry args={[.19,.16,.02]}/><meshStandardMaterial color="#2e3238" roughness={.3}/></mesh>
    {avMap&&<mesh position={[0,.52,.5]}><circleGeometry args={[.2,20]}/><meshBasicMaterial map={avMap} toneMapped={false}/></mesh>}
   </group>
   <mesh ref={ring} rotation={[-Math.PI/2,0,0]} position={[0,.04,0]}><ringGeometry args={[.72,selected?.88:.8,32]}/><meshBasicMaterial color={a.color} transparent side={THREE.DoubleSide}/></mesh>
@@ -788,7 +798,7 @@ const AgentView=memo(function AgentView({a,selected}:{a:Agent;selected:boolean})
   </Html>
   {/* Nameplate tag — not a speech bubble; always-on status from API bvState */}
   {showTag&&<Html position={[0,2.05,0]} center zIndexRange={[30,20]} style={{pointerEvents:'none'}}>
-   <div ref={tagWrap} className={'tag always'+(selected?' on':'')+(a.bvState==='work'?' work':'')}>
+   <div ref={tagWrap} className={'tag always big'+(selected?' on':'')+(a.bvState==='work'?' work':'')}>
     <span className="tag-row">
      {a.hasAvatar?<img className="tag-av" src={`/avatars/${a.id}`} alt=""/>:<i className="dot" style={{background:a.color}}/>}
      {a.name}
@@ -838,8 +848,8 @@ export function Scene(){
  useSim()
  return <>
  <color attach="background" args={['#e7e5e0']}/><fog attach="fog" args={['#e7e5e0',70,160]}/>
- <hemisphereLight args={['#f4efe6','#6e675c',0.42]}/>
- <ambientLight intensity={0.08} color="#e6e2da"/>
+ <hemisphereLight args={['#f4efe6','#7a7368',0.5]}/>
+ <ambientLight intensity={0.16} color="#e8e4dc"/>
  {/* one warm rake across the parquet — no bloom, no second sun */}
  <directionalLight castShadow intensity={1.55} color="#f0d7b4" position={[10,9,6]} shadow-mapSize={[1024,1024]} shadow-camera-left={-26} shadow-camera-right={26} shadow-camera-top={20} shadow-camera-bottom={-20} shadow-camera-near={1} shadow-camera-far={48} shadow-bias={-.0004} shadow-normalBias={.03}/>
  <directionalLight intensity={0.28} color="#c5d0dc" position={[-14,8,-6]}/>
@@ -847,7 +857,7 @@ export function Scene(){
  <mesh rotation={[-Math.PI/2,0,0]} receiveShadow><planeGeometry args={[38,26]}/><meshStandardMaterial map={wood} roughness={.5}/></mesh>
  <mesh rotation={[-Math.PI/2,0,0]} position={[0,.015,0]} receiveShadow><planeGeometry args={[38,4]}/><meshStandardMaterial color="#d9d6d0" roughness={.35} metalness={.05}/></mesh>
  {[-2,2].map(z=><Box key={z} p={[0,.022,z]} a={[38,.01,.04]} c="#b4b7bc" m={.15} ro={.3}/>)}
- <ContactShadows position={[0,0.02,0]} opacity={0.38} scale={36} blur={2.2} far={6} color="#1a1612"/>
+ <ContactShadows position={[0,0.02,0]} opacity={0.28} scale={36} blur={2.6} far={6} color="#2a2620"/>
  {rooms.map(r=><RoomView key={r.id} r={r}/>)}{rooms.map(r=><RoomLabel key={r.id+"-lbl"} r={r}/>)}
  {agents.map(a=><AgentView key={a.id} a={a} selected={ui.sel===a}/>)}
  <TalkBeams/>
