@@ -482,39 +482,47 @@ html, body, #root {
 
 button { font: inherit; }
 
-/* Mini status chip — same for every bot. One state word. No name, no avatar.
-   Slightly larger ink on a light floor; still a small frosted pill. Hover does not grow it. */
+/* Mini status chip — same for every bot. One bvState word. Light, no outline. */
 .tag {
-  background: rgba(255, 252, 248, 0.62);
-  backdrop-filter: blur(8px) saturate(1.15);
-  -webkit-backdrop-filter: blur(8px) saturate(1.15);
-  border: 1px solid rgba(36, 32, 28, 0.18);
-  border-radius: 999px;
-  padding: 1px 6px;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: 0.01em;
+  background: rgba(255, 252, 248, 0.94);
+  border: 1px solid rgba(28, 24, 20, 0.08);
+  border-radius: 14px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
   white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(28, 24, 20, 0.12);
-  color: rgba(22, 18, 16, 0.94);
+  box-shadow: 0 1px 3px rgba(40, 32, 24, 0.08);
+  color: #1c1c1e;
   font-family: var(--font);
+  text-shadow: none;
+  -webkit-text-stroke: 0;
   transform: none;
   pointer-events: none;
 }
 .tag:hover,
 .tag.on {
-  background: rgba(255, 252, 248, 0.72);
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 999px;
-  box-shadow: 0 1px 2px rgba(28, 24, 20, 0.12);
+  background: rgba(255, 252, 248, 0.98);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(40, 32, 24, 0.08);
   outline: none;
 }
-.tag small { color: inherit; display: block; font-size: 10px; font-weight: 700; line-height: 1.25; letter-spacing: 0.01em; }
+.tag small {
+  color: inherit;
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
 .tag:hover small,
-.tag.on small { font-size: 10px; }
+.tag.on small { font-size: 12px; }
 .dot, .rl i {
   display: inline-block;
   width: 7px; height: 7px;
@@ -863,8 +871,7 @@ button { font: inherit; }
 }
 .frieze-chip.kind-talk b { color: #3d7ab8; }
 
-/* Speech bubble = real transcript only, ONE chip for every bot.
-   Hidden (opacity 0) unless a transcript is live. One line. No comic tail. */
+/* Speech bubble = real transcript only. Light card, large radius, no tail. */
 .speech-bubble-html {
   width: max-content;
   max-width: 220px;
@@ -872,91 +879,50 @@ button { font: inherit; }
   display: block;
 }
 .speech-bubble {
-  --sb-out: cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
   box-sizing: border-box;
-  max-width: 168px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  color: rgba(255, 252, 248, 0.96);
-  font: 600 11px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
-  letter-spacing: -0.025em;
+  max-width: 200px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  color: #1c1c1e;
+  font: 600 13px/1.25 var(--font);
+  letter-spacing: 0;
   text-align: left;
   writing-mode: horizontal-tb;
-  /* translucent charcoal + white frost, soft gradient rim */
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.05)) padding-box,
-    linear-gradient(155deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.10) 46%, rgba(196, 192, 186, 0.22)) border-box;
-  background-color: rgba(38, 36, 34, 0.42);
-  backdrop-filter: blur(16px) saturate(1.35);
-  -webkit-backdrop-filter: blur(16px) saturate(1.35);
-  border: 1px solid transparent;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.28) inset,
-    0 4px 12px rgba(16, 14, 12, 0.20);
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+  background: rgba(255, 252, 248, 0.96);
+  border: 1px solid rgba(28, 24, 20, 0.06);
+  box-shadow: 0 2px 8px rgba(40, 32, 24, 0.08);
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transform: translate3d(0, 6px, 0) scale(0.92);
-  filter: blur(1px);
-  transition:
-    opacity 200ms var(--sb-out),
-    transform 220ms var(--sb-out),
-    max-width 240ms var(--sb-out),
-    padding 220ms var(--sb-out),
-    border-radius 220ms var(--sb-out),
-    filter 180ms var(--sb-out),
-    box-shadow 220ms var(--sb-out),
-    visibility 0s linear 220ms;
-  will-change: opacity, transform, max-width;
+  transform: translate3d(0, 4px, 0);
+  transition: opacity 180ms ease, transform 180ms ease, visibility 0s linear 180ms;
 }
-.speech-bubble.is-on {
-  opacity: 1;
-  visibility: visible;
-  transform: translate3d(0, 0, 0) scale(1);
-  filter: none;
-  pointer-events: auto;
-  transition:
-    opacity 200ms var(--sb-out),
-    transform 220ms var(--sb-out),
-    max-width 240ms var(--sb-out),
-    padding 220ms var(--sb-out),
-    border-radius 220ms var(--sb-out),
-    filter 180ms var(--sb-out),
-    box-shadow 220ms var(--sb-out),
-    visibility 0s linear 0s;
-  animation: sb-float 2.6s ease-in-out infinite;
-}
-/* Transcript is the only gate. Idle bvState must not hide a real line. */
-.speech-bubble.is-on.is-idle {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-/* Work and talk share this chip — no second size, no pulse. */
-.speech-bubble.is-on.is-work { animation: sb-float 2.6s ease-in-out infinite; }
+.speech-bubble.is-on,
+.speech-bubble.is-on.is-idle,
+.speech-bubble.is-on.is-work,
 .speech-bubble.is-on:hover,
 .speech-bubble.is-on.is-hot {
-  max-width: 168px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  filter: none;
+  max-width: 200px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  pointer-events: none;
+  animation: none;
+  transition: opacity 180ms ease, transform 180ms ease, visibility 0s linear 0s;
 }
-.speech-bubble::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex: 0 0 5px;
-  background: rgba(255, 252, 248, 0.78);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.10);
-}
+.speech-bubble::before { content: none; display: none; }
 .speech-bubble-text {
   min-width: 0;
-  max-width: 152px;
+  max-width: 176px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -964,36 +930,12 @@ button { font: inherit; }
 .speech-bubble-text:empty { display: none; }
 .speech-bubble:hover .speech-bubble-text,
 .speech-bubble.is-hot .speech-bubble-text {
-  max-width: 152px;
+  max-width: 176px;
   white-space: nowrap;
-}
-@keyframes sb-float {
-  0%, 100% { translate: 0 0; }
-  50% { translate: 0 -3px; }
-}
-@keyframes sb-pulse {
-  0%, 100% {
-    translate: 0 0;
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.26) inset,
-      0 4px 10px rgba(16, 14, 12, 0.18);
-  }
-  50% {
-    translate: 0 -2px;
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.40) inset,
-      0 0 0 3px rgba(255, 255, 255, 0.10),
-      0 8px 16px rgba(16, 14, 12, 0.24);
-  }
-}
-@keyframes sb-dot {
-  0%, 100% { transform: scale(1); opacity: 0.75; }
-  50% { transform: scale(1.35); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .speech-bubble,
-  .speech-bubble.is-on,
-  .speech-bubble.is-work::before { animation: none !important; }
+  .speech-bubble.is-on { animation: none !important; transition: none; }
 }
 
 img.av, img.agent-av { object-fit: cover; display: block; padding: 0; border: 0; }
