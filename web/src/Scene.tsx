@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef,useState} from 'react'
 import {useFrame,useThree} from '@react-three/fiber'
 import {ContactShadows,Html,RoundedBox} from '@react-three/drei'
 import * as THREE from 'three'
-import {agents,rooms,step,ui,useSim,selectAgent,go,CLICK_MOVE_MAX,skillBooks,talkPairs,type Agent,type Room,type SkillJSON} from './sim'
+import {agents,rooms,step,ui,useSim,selectAgent,go,CLICK_MOVE_MAX,skillBooks,talkPairs,byVotes,type Agent,type Room,type SkillJSON} from './sim'
 
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v))
 type V3=[number,number,number]
@@ -357,7 +357,7 @@ function ReadingLamp({p}:{p:V3}){
 
 function LibraryRoom({r}:{r:Room}){
   const b=r.s
-  const books=skillBooks
+  const books=byVotes('skills', skillBooks)
   const empty=books.length===0
   const per=Math.max(1,Math.ceil((empty?1:books.length)/5))
   const chunks:SkillJSON[][]=empty
@@ -598,7 +598,7 @@ function LabRoom({r}:{r:Room}){
     <CableTray p={[3.55,0,0]} len={5.6} ax="z"/>
     <ConsoleDesk p={[0,0,b*2.15]} r={b>0?Math.PI:0}/>
     <Chair p={[0,0,b*3.05]} r={b>0?0:Math.PI}/>
-    <SkillBoard title="Compétences" skills={skillBooks} p={[0,0,b*4.35]} r={b>0?Math.PI:0}/>
+    <SkillBoard title="Compétences" skills={byVotes('skills', skillBooks)} p={[0,0,b*4.35]} r={b>0?Math.PI:0}/>
     <group position={[-3.45,0,b*3.5]}>
       <RoundedBox args={[1.2,1.5,.65]} radius={.015} position={[0,.75,0]} castShadow>
         <meshStandardMaterial color="#0c1016" metalness={.55} roughness={.3}/>

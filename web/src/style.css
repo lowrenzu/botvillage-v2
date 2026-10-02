@@ -920,3 +920,7 @@ img.agent-av { width: 36px; height: 36px; border-radius: 12px; }
   text-transform: none;
   letter-spacing: 0;
 }
+
+.vote-n { font-variant-numeric: tabular-nums; color: var(--mu); font-size: 11px; min-width: 1.2em; text-align: right; }
+.vote-btns { display: flex; gap: 2px; }
+.vote-btns i { min-width: 22px; min-height: 22px; display: grid; place-items: center; font-style: normal; border-radius: 6px; background: rgba(0,0,0,.04); }

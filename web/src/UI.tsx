@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import {
   agents, feed, link, ui, useSim, sendPrompt, selectAgent, toggleFollow, promptToken, setPromptToken,
-  sessionDayTimeline,
+  sessionDayTimeline, byVotes, castVote, voteOf,
   type Agent, type Ev, type EvKind, type PromptPhase,
 } from './sim'
 
@@ -88,7 +88,12 @@ export function UI() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!a || !draft.trim()) return
+    if (!draft.trim()) return
+    if (!ui.sel) {
+      const top = byVotes('agents', agents)[0]
+      if (!top) return
+      selectAgent(top)
+    }
     const text = draft
     setDraft('')
     await sendPrompt(text)
@@ -138,7 +143,7 @@ export function UI() {
 
       {agents.length > 0 && (
         <div className="roster" role="list">
-          {agents.map(x => (
+          {byVotes('agents', agents).map(x => (
             <button
               key={x.id}
               type="button"
@@ -154,6 +159,11 @@ export function UI() {
                 </span>
               )}
               <span className="roster-name">{x.name}</span>
+              <span className="vote-n" title="Votes locaux">{voteOf('agents', x.id)}</span>
+              <span className="vote-btns">
+                <i role="button" aria-label="Plus" onClick={ev => { ev.stopPropagation(); castVote('agents', x.id, 1) }}>+</i>
+                <i role="button" aria-label="Moins" onClick={ev => { ev.stopPropagation(); castVote('agents', x.id, -1) }}>−</i>
+              </span>
               {x.promptPhase !== 'idle' ? (
                 <em className={'roster-phase phase-' + x.promptPhase} title={PHASE_HINT[x.promptPhase]}>
                   {PHASE[x.promptPhase]}
