@@ -20,7 +20,7 @@ const roomWood=(()=>{const t=wood.clone();t.repeat=new THREE.Vector2(8.4/5,8.4/5
 function Rig(){
  /* camera: overview fits all 6 rooms; viewOffset shifts optical center into left of HUD */
  const {gl,camera,size}=useThree()
- const HOME={az:.68,el:.62,dist:52}
+ const HOME={az:.62,el:.72,dist:60}
  const s=useRef({az:HOME.az,el:HOME.el,dist:HOME.dist,distWant:HOME.dist,tgt:new THREE.Vector3(),vaz:0,vel:0,dragging:false,booted:false})
  const want=useMemo(()=>new THREE.Vector3(),[]),camWant=useMemo(()=>new THREE.Vector3(),[])
  useEffect(()=>{const el=gl.domElement,v=s.current;let d=false
@@ -44,7 +44,8 @@ function Rig(){
   let railW=48
   if(rail){const r=rail.getBoundingClientRect();railW=Math.max(48,r.width+(window.innerWidth-r.right)+14)}
   const cam=camera as THREE.PerspectiveCamera
-  if(size.width>640)cam.setViewOffset(size.width,size.height,-railW*.5,0,size.width,size.height)
+  /* positive offsetX pans scene left into free pane (negative pushed it under the HUD) */
+  if(size.width>720)cam.setViewOffset(size.width,size.height,railW*.55,0,size.width,size.height)
   else cam.clearViewOffset()
   if(!v.dragging){v.az+=v.vaz*dt;v.el=clamp(v.el+v.vel*dt,.28,1.25)
    const damp=Math.exp(-dt*1.75);v.vaz*=damp;v.vel*=damp
