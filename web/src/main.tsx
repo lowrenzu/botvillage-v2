@@ -11,7 +11,7 @@ createRoot(document.getElementById('root')!).render(
   <>
     <Canvas
       shadows
-      camera={{ fov: 46, near: 1, far: 280, position: [26, 24, 30] }}
+      camera={{ fov: 42, near: 1, far: 280, position: [30, 42, 34] }}
       dpr={[1, 2]}
       gl={{ antialias: true }}
     >

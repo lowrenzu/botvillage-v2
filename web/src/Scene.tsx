@@ -18,27 +18,35 @@ const wood=(()=>{const c=document.createElement('canvas');c.width=c.height=512;c
 const roomWood=(()=>{const t=wood.clone();t.repeat=new THREE.Vector2(8.4/5,8.4/5);t.needsUpdate=true;return t})()
 
 function Rig(){
- /* camera polish: coasting orbit inertia, soft ¾ frame ease, exponential wheel zoom */
- const {gl,camera}=useThree(),s=useRef({az:.72,el:.55,dist:40,distWant:40,tgt:new THREE.Vector3(),vaz:0,vel:0,dragging:false}),want=useMemo(()=>new THREE.Vector3(),[]),camWant=useMemo(()=>new THREE.Vector3(),[])
+ /* camera: overview fits all 6 rooms; viewOffset shifts optical center into left of HUD */
+ const {gl,camera,size}=useThree()
+ const HOME={az:.68,el:.62,dist:52}
+ const s=useRef({az:HOME.az,el:HOME.el,dist:HOME.dist,distWant:HOME.dist,tgt:new THREE.Vector3(),vaz:0,vel:0,dragging:false,booted:false})
+ const want=useMemo(()=>new THREE.Vector3(),[]),camWant=useMemo(()=>new THREE.Vector3(),[])
  useEffect(()=>{const el=gl.domElement,v=s.current;let d=false
   const dn=(e:PointerEvent)=>{d=true;v.dragging=true;v.vaz=0;v.vel=0;ui.moved=0;el.setPointerCapture(e.pointerId)}
   const up=()=>{d=false;v.dragging=false}
   const mv=(e:PointerEvent)=>{if(!d)return;ui.moved+=Math.abs(e.movementX)+Math.abs(e.movementY)
    const daz=-e.movementX*.0045,del=e.movementY*.0038
    v.az+=daz;v.el=clamp(v.el+del,.28,1.25)
-   /* stronger carry into release — used by inertia damp below */
    v.vaz=daz*78;v.vel=del*78
    if(ui.moved>CLICK_MOVE_MAX)ui.frame=null}
   const wh=(e:WheelEvent)=>{e.preventDefault()
-   /* accumulate target dist; useFrame eases toward it (no snap) */
    const step=Math.sign(e.deltaY)*Math.min(Math.abs(e.deltaY),120)*.0009
-   v.distWant=clamp(v.distWant*Math.exp(step||Math.sign(e.deltaY)*.07),12,72)
+   v.distWant=clamp(v.distWant*Math.exp(step||Math.sign(e.deltaY)*.07),14,80)
    if(ui.frame)ui.frame.dist=v.distWant}
   el.addEventListener('pointerdown',dn);el.addEventListener('pointermove',mv);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);el.addEventListener('wheel',wh,{passive:false})
-  return()=>{el.removeEventListener('pointerdown',dn);el.removeEventListener('pointermove',mv);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);el.removeEventListener('wheel',wh)}},[gl])
+  return()=>{el.removeEventListener('pointerdown',dn);el.removeEventListener('pointermove',mv);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);el.removeEventListener('wheel',wh)
+   if((camera as THREE.PerspectiveCamera).clearViewOffset)(camera as THREE.PerspectiveCamera).clearViewOffset()}},[gl,camera])
  useFrame((_,dt)=>{dt=Math.min(dt,.033);step(dt);const v=s.current
+  /* keep world (0,0) optically centered in the free left pane (HUD overlays right) */
+  const rail=document.querySelector('.hud-rail') as HTMLElement|null
+  let railW=48
+  if(rail){const r=rail.getBoundingClientRect();railW=Math.max(48,r.width+(window.innerWidth-r.right)+14)}
+  const cam=camera as THREE.PerspectiveCamera
+  if(size.width>640)cam.setViewOffset(size.width,size.height,-railW*.5,0,size.width,size.height)
+  else cam.clearViewOffset()
   if(!v.dragging){v.az+=v.vaz*dt;v.el=clamp(v.el+v.vel*dt,.28,1.25)
-   /* slow smooth damp — long coast, no hard snap-stop */
    const damp=Math.exp(-dt*1.75);v.vaz*=damp;v.vel*=damp
    if(Math.abs(v.vaz)<1e-4)v.vaz=0;if(Math.abs(v.vel)<1e-4)v.vel=0}
   const fr=ui.frame
@@ -46,7 +54,6 @@ function Rig(){
    let daz=fr.az-v.az;daz=Math.atan2(Math.sin(daz),Math.cos(daz))
    v.az+=daz*k;v.el+=(fr.el-v.el)*k
    v.distWant+=(fr.dist-v.distWant)*k
-   /* bleed residual orbit so framing isn't fought */
    const bleed=Math.exp(-dt*7);v.vaz*=bleed;v.vel*=bleed
    if(ui.follow&&ui.sel){fr.x=ui.sel.x;fr.z=ui.sel.z}
    want.set(fr.x,0,fr.z)
@@ -54,8 +61,10 @@ function Rig(){
    want.set(0,0,0)
    if(ui.follow&&ui.sel){want.set(ui.sel.x,0,ui.sel.z);v.distWant+=(14-v.distWant)*(1-Math.exp(-dt*1.15))}
   }
-  /* exponential ease actual dist toward target (wheel + frame) */
   v.dist+=(v.distWant-v.dist)*(1-Math.exp(-dt*3.4))
+  if(!v.booted){v.booted=true;v.tgt.copy(want);v.dist=v.distWant
+   camWant.set(v.tgt.x+v.dist*Math.sin(v.az)*Math.cos(v.el),v.dist*Math.sin(v.el),v.tgt.z+v.dist*Math.cos(v.az)*Math.cos(v.el))
+   camera.position.copy(camWant);camera.lookAt(v.tgt);return}
   v.tgt.lerp(want,1-Math.exp(-dt*1.55))
   camWant.set(v.tgt.x+v.dist*Math.sin(v.az)*Math.cos(v.el),v.dist*Math.sin(v.el),v.tgt.z+v.dist*Math.cos(v.az)*Math.cos(v.el))
   camera.position.lerp(camWant,1-Math.exp(-dt*2.15));camera.lookAt(v.tgt)})
