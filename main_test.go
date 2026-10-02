@@ -62,6 +62,8 @@ func TestCheckPromptAuth(t *testing.T) {
 }
 
 func TestPromptAuthzAndSanitize(t *testing.T) {
+	t.Setenv("VILLAGE_EXCLUDE", "")
+	t.Setenv("VILLAGE_ALLOW", "")
 	root := t.TempDir()
 	agents := filepath.Join(root, "agents")
 	allowID := "cb63cb89-8fcf-4dac-b76d-e415c90b4341"

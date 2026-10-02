@@ -159,6 +159,8 @@ func TestFilterAllowed(t *testing.T) {
 }
 
 func TestExcludeFromEnv(t *testing.T) {
+	t.Setenv("VILLAGE_EXCLUDE", "")
+	t.Setenv("VILLAGE_ALLOW", "")
 	id := "92eb4cb2-b322-465a-8c32-da3d95c2fd0c"
 	if !Allowed(id, DefaultAllowlist) {
 		t.Fatal("no VILLAGE_EXCLUDE must keep every agent")
