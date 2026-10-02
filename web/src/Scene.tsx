@@ -522,11 +522,13 @@ function LabRoom({r}:{r:Room}){
     <Box p={[0,.04,-4.15]} a={[8.4,.035,.1]} c={AL} m={.2} ro={.3}/>
     <Box p={[-4.15,.04,0]} a={[.1,.035,8.4]} c={AL} m={.2} ro={.3}/>
     <Box p={[4.15,.04,0]} a={[.1,.035,8.4]} c={AL} m={.2} ro={.3}/>
-    <ServerRack p={[-2.8,0,-b*3.4]} r={b>0?0:Math.PI} units={9}/>
-    <ServerRack p={[0,0,-b*3.4]} r={b>0?0:Math.PI} units={8}/>
-    <ServerRack p={[2.8,0,-b*3.4]} r={b>0?0:Math.PI} units={9}/>
+    {/* door-wall flanks only — leave ±1.5 clear for go() centerline (matches library) */}
+    <ServerRack p={[-2.85,0,-b*3.4]} r={b>0?0:Math.PI} units={9}/>
+    <ServerRack p={[2.85,0,-b*3.4]} r={b>0?0:Math.PI} units={9}/>
     <ServerRack p={[-3.55,0,b*.2]} r={Math.PI/2} units={7}/>
     <ServerRack p={[3.55,0,b*.2]} r={-Math.PI/2} units={7}/>
+    {/* former center door rack — back bay, clear of door aisle + console */}
+    <ServerRack p={[2.4,0,b*3.55]} r={b>0?Math.PI:0} units={8}/>
     <CableTray p={[0,0,-b*3.4]} len={7.4} ax="x"/>
     <CableTray p={[-3.55,0,0]} len={5.6} ax="z"/>
     <CableTray p={[3.55,0,0]} len={5.6} ax="z"/>

@@ -79,8 +79,8 @@ export const rooms: Room[] = RD.map(([id, n, x, z, c, t]) => {
     ;[[-2.4, -1.8], [2.4, -1.8], [-2.4, 1.8], [2.4, 1.8]].forEach(([dx, dz]) =>
       S(x + dx, z + dz, dz < 0 ? Math.PI : 0))
   }
-  /* door on corridor-facing wall, room centerline — hall at z≈0 */
-  return { id, n, x, z, c, t, s, door: z - s * 4.5, slots }
+  /* door on corridor-facing wall — matches Doorway at local −s·5 (hall z≈0) */
+  return { id, n, x, z, c, t, s, door: z - s * 5, slots }
 })
 
 export const RM = Object.fromEntries(rooms.map(r => [r.id, r])) as Record<RoomId, Room>
@@ -164,10 +164,86 @@ function compactPath(pts: { x: number; z: number }[]) {
   return out
 }
 
+const HALL_Z = 0
+
+/** True when agent is on the corridor strip between north/south door rows. */
+function inHall(z: number) {
+  return Math.abs(z) < 1.35
+}
+
 /**
- * Door → corridor (z≈0) → door path for all room types.
- * Avoids diagonal cuts through room interiors: exit via own door,
- * walk the hall, enter target door, then to slot.
+ * Which room footprint contains (x,z). Null in the hall / outside.
+ * Used so mid-walk redirects exit via the physical room, not a.room
+ * (a.room is already the prior destination while pathing).
+ */
+function roomContaining(x: number, z: number): Room | null {
+  for (const r of rooms) {
+    if (Math.abs(x - r.x) > 4.6) continue
+    if (r.s < 0) {
+      if (z <= r.door + 0.35 && z >= r.z - 4.6) return r
+    } else {
+      if (z >= r.door - 0.35 && z <= r.z + 4.6) return r
+    }
+  }
+  return null
+}
+
+/** Apron just inside the door — past door-wall shelves/racks, before center fixtures. */
+function apronZ(r: Room) {
+  /* library/lab door flanks ~3.4–3.45; meeting table r≈1.9 → stay outside */
+  if (r.t === 'meet') return r.z - r.s * 3.35
+  return r.z - r.s * 2.2
+}
+
+type Pt = { x: number; z: number }
+
+/** Exit waypoints: leave furniture via clear aisle → door on room centerline. */
+function exitWaypoints(f: Room, ax: number, az: number): Pt[] {
+  if (f.t === 'desk' || f.t === 'lab') {
+    /* desk/lab: open spine on room.x between furniture columns */
+    return [
+      { x: f.x, z: az },
+      { x: f.x, z: f.door },
+    ]
+  }
+  /* library / meet: own lane → apron (skip center table) → door centerline */
+  const fa = apronZ(f)
+  return [
+    { x: ax, z: fa },
+    { x: f.x, z: fa },
+    { x: f.x, z: f.door },
+  ]
+}
+
+/** Enter waypoints: door → clear aisle → slot (no desk/rack/shelf clips). */
+function enterWaypoints(r: Room, q: Slot): Pt[] {
+  if (r.t === 'desk' || r.t === 'lab') {
+    return [
+      { x: r.x, z: r.door },
+      { x: r.x, z: q.z },
+      { x: q.x, z: q.z },
+    ]
+  }
+  const ra = apronZ(r)
+  if (r.t === 'library') {
+    return [
+      { x: r.x, z: r.door },
+      { x: r.x, z: ra },
+      { x: q.x, z: ra },
+      { x: q.x, z: q.z },
+    ]
+  }
+  /* meet: apron then straight to seat (ring clear of table) */
+  return [
+    { x: r.x, z: r.door },
+    { x: r.x, z: ra },
+    { x: q.x, z: q.z },
+  ]
+}
+
+/**
+ * Door → corridor centerline (z≈0) → door → slot.
+ * Never cuts diagonally through desks / racks / shelves / meeting table.
  */
 export function go(a: Agent, r: Room) {
   const q = free(r)
@@ -182,18 +258,29 @@ export function go(a: Agent, r: Room) {
     arrive(a)
     return
   }
-  const f = a.room
-  /* centerline → door → hall → door → slot (never clip side panes) */
-  const path = compactPath([
-    { x: f.x, z: a.z },
-    { x: f.x, z: f.door },
-    { x: f.x, z: 0 },
-    { x: r.x, z: 0 },
-    { x: r.x, z: r.door },
-    { x: r.x, z: q.z },
-    { x: q.x, z: q.z },
-  ])
-  a.path = path
+
+  const pts: Pt[] = []
+  const here = roomContaining(a.x, a.z)
+
+  if (inHall(a.z) || !here) {
+    /* already in corridor (or between rooms): join hall centerline, no interior exit */
+    pts.push({ x: a.x, z: HALL_Z }, { x: r.x, z: HALL_Z })
+  } else if (here === r) {
+    /* same physical room, just re-slot — short interior path, no hall hop */
+    if (r.t === 'desk' || r.t === 'lab') {
+      pts.push({ x: r.x, z: a.z }, { x: r.x, z: q.z }, { x: q.x, z: q.z })
+    } else {
+      const ra = apronZ(r)
+      pts.push({ x: a.x, z: ra }, { x: q.x, z: ra }, { x: q.x, z: q.z })
+    }
+  } else {
+    pts.push(...exitWaypoints(here, a.x, a.z))
+    pts.push({ x: here.x, z: HALL_Z }, { x: r.x, z: HALL_Z })
+  }
+
+  if (here !== r) pts.push(...enterWaypoints(r, q))
+
+  a.path = compactPath(pts)
   a.slot.by = null
   q.by = a
   a.slot = q
