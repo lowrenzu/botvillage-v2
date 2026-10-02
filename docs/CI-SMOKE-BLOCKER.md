@@ -12,3 +12,5 @@ Until a PAT/`gh auth refresh -s workflow` is available:
 - tracked `.github/workflows/ci.yml` stays go-test + web-build only (no smoke step) so pushes succeed
 
 When `workflow` scope exists: copy `docs/ci-smoke-workflow.yml` → `.github/workflows/ci.yml` and push.
+
+**2026-10-03 01:29 PT:** retried copying this mirror onto `.github/workflows/ci.yml` and pushing `main`. GitHub rejected it: refusing to allow an OAuth App to create or update workflow `.github/workflows/ci.yml` without `workflow` scope. Scopes still `gist`, `read:org`, `repo`. The workflow commit was not pushed; tracked `ci.yml` is unchanged. This mirror stays.
