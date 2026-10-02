@@ -116,8 +116,9 @@ func TestPromptAuthzAndSanitize(t *testing.T) {
 		t.Fatalf("unknown agent want 404 got %d", rr.Code)
 	}
 
-	// health: no agentData
+	// health: no agentData (loopback ⇒ full payload)
 	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 	if rr.Code != 200 {
@@ -192,4 +193,142 @@ func mustReadStatic() []byte {
 		return []byte("<html></html>")
 	}
 	return b
+}
+
+func TestIsGrokBuildTarget(t *testing.T) {
+	cases := []struct {
+		target, name, id string
+		want             bool
+	}{
+		{"grok-build", "", "", true},
+		{"GROK-BUILD", "Cursor", "x", true},
+		{"", "grok", "x", true},
+		{"", "Grok", "x", true},
+		{"", "Grok Build", "x", true},
+		{"", "grok build agent", "x", true},
+		{"", "Grok Bot", "x", false},
+		{"", "Bitchette", "x", false},
+		{"", "Anything", grokBuildAgentID, true},
+		{"", "Anything", "cb63cb89-8fcf-4dac-b76d-e415c90b4341", false},
+		{"webhook", "Grok Build", "", true},
+	}
+	for _, c := range cases {
+		got := isGrokBuildTarget(c.target, c.name, c.id)
+		if got != c.want {
+			t.Fatalf("isGrokBuildTarget(%q,%q,%q)=%v want %v", c.target, c.name, c.id, got, c.want)
+		}
+	}
+}
+
+func TestHealthScrubRemote(t *testing.T) {
+	root := t.TempDir()
+	agents := filepath.Join(root, "agents")
+	_ = os.MkdirAll(filepath.Join(agents, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), 0o755)
+	whPath := filepath.Join(root, "webhook.json")
+	_ = os.WriteFile(whPath, []byte(`{"url":"http://127.0.0.1:9/x","key":"k"}`), 0o600)
+	wh := webhook.New(whPath, filepath.Join(root, "wakes.jsonl"))
+	_ = wh.Load()
+	rroot := roster.Root{AgentData: root}
+	h := hub.New(rroot)
+	_, _ = h.RefreshRoster()
+	mux := http.NewServeMux()
+	registerRoutes(mux, routeDeps{
+		rroot: rroot, h: h, wh: wh, promptTok: "sekrit", static: staticFS,
+	})
+
+	// loopback: full health
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	req.RemoteAddr = "127.0.0.1:9"
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	var full map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &full)
+	for _, k := range []string{"ok", "demo", "webhook", "bots", "grokBuild", "allowedIds"} {
+		if _, ok := full[k]; !ok {
+			t.Fatalf("loopback health missing %s: %v", k, full)
+		}
+	}
+
+	// remote unauth: scrubbed
+	req2 := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	req2.RemoteAddr = "203.0.113.8:9"
+	rr2 := httptest.NewRecorder()
+	mux.ServeHTTP(rr2, req2)
+	var scrub map[string]any
+	_ = json.Unmarshal(rr2.Body.Bytes(), &scrub)
+	if scrub["ok"] != true {
+		t.Fatalf("scrub ok: %v", scrub)
+	}
+	for _, k := range []string{"webhook", "grokBuild", "bots", "allowedIds", "demo"} {
+		if _, ok := scrub[k]; ok {
+			t.Fatalf("scrub must omit %s: %v", k, scrub)
+		}
+	}
+
+	// remote with token: full
+	req3 := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	req3.RemoteAddr = "203.0.113.8:9"
+	req3.Header.Set("X-Village-Token", "sekrit")
+	rr3 := httptest.NewRecorder()
+	mux.ServeHTTP(rr3, req3)
+	var authd map[string]any
+	_ = json.Unmarshal(rr3.Body.Bytes(), &authd)
+	if _, ok := authd["webhook"]; !ok {
+		t.Fatalf("authed remote should get full health: %v", authd)
+	}
+}
+
+func TestOpaqueSessionCookie(t *testing.T) {
+	root := t.TempDir()
+	whPath := filepath.Join(root, "webhook.json")
+	_ = os.WriteFile(whPath, []byte(`{"url":"http://127.0.0.1:9/x","key":"k"}`), 0o600)
+	wh := webhook.New(whPath, "")
+	_ = wh.Load()
+	mux := http.NewServeMux()
+	tok := "super-secret-token-value"
+	registerRoutes(mux, routeDeps{
+		rroot: roster.Root{AgentData: root}, h: hub.New(roster.Root{AgentData: root}),
+		wh: wh, promptTok: tok, static: staticFS,
+	})
+	body, _ := json.Marshal(map[string]string{"token": tok})
+	req := httptest.NewRequest(http.MethodPost, "/api/session", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("session login %d %s", rr.Code, rr.Body.String())
+	}
+	cookies := rr.Result().Cookies()
+	var sid string
+	for _, c := range cookies {
+		if c.Name == "village_session" {
+			sid = c.Value
+			if c.Value == tok {
+				t.Fatal("cookie must not be raw prompt token")
+			}
+			if !c.Secure {
+				t.Fatal("Secure expected under X-Forwarded-Proto https")
+			}
+			if !c.HttpOnly {
+				t.Fatal("HttpOnly")
+			}
+		}
+	}
+	if sid == "" {
+		t.Fatal("no village_session cookie")
+	}
+	remote := httptest.NewRequest(http.MethodGet, "/api/bots", nil)
+	remote.RemoteAddr = "203.0.113.8:9"
+	remote.AddCookie(&http.Cookie{Name: "village_session", Value: sid})
+	if !authorized(remote, tok) {
+		t.Fatal("opaque session cookie should authorize")
+	}
+	bad := httptest.NewRequest(http.MethodGet, "/api/bots", nil)
+	bad.RemoteAddr = "203.0.113.8:9"
+	bad.AddCookie(&http.Cookie{Name: "village_session", Value: tok})
+	if authorized(bad, tok) {
+		t.Fatal("raw token as cookie must NOT authorize")
+	}
 }
