@@ -51,8 +51,8 @@ func TestCheckPromptAuth(t *testing.T) {
 	t.Setenv("VILLAGE_LOCAL", "1")
 	bare := httptest.NewRequest(http.MethodGet, "/api/bots", nil)
 	bare.RemoteAddr = "203.0.113.8:9"
-	if authorized(bare, "secret-token") {
-		t.Fatal("VILLAGE_LOCAL must not authorize non-loopback without token")
+	if !authorized(bare, "secret-token") {
+		t.Fatal("VILLAGE_LOCAL=1 must authorize bare remote without token")
 	}
 	loop := httptest.NewRequest(http.MethodGet, "/api/bots", nil)
 	loop.RemoteAddr = "127.0.0.1:9"
@@ -60,6 +60,11 @@ func TestCheckPromptAuth(t *testing.T) {
 		t.Fatal("loopback stays open under VILLAGE_LOCAL")
 	}
 	t.Setenv("VILLAGE_LOCAL", "")
+	bareOff := httptest.NewRequest(http.MethodGet, "/api/bots", nil)
+	bareOff.RemoteAddr = "203.0.113.8:9"
+	if authorized(bareOff, "secret-token") {
+		t.Fatal("without VILLAGE_LOCAL, bare remote must still need token")
+	}
 }
 
 func TestPromptAuthzAndSanitize(t *testing.T) {

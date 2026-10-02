@@ -127,7 +127,7 @@ func main() {
 		log.Printf("prompt auth: non-loopback requires VILLAGE_PROMPT_TOKEN (webhook key is never sent to the browser)")
 	}
 	if os.Getenv("VILLAGE_LOCAL") == "1" && strings.HasPrefix(*listen, "0.0.0.0") {
-		log.Printf("VILLAGE_LOCAL=1 with %s: remotes still need the prompt token (loopback peers only are open)", *listen)
+		log.Printf("VILLAGE_LOCAL=1 with %s: remotes are open (dev/trust LAN/Tailscale) — no token gate", *listen)
 	}
 
 	mux := http.NewServeMux()
@@ -359,9 +359,13 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 		body.Prompt = strings.TrimSpace(body.Prompt)
 
 		if body.Action == "skip" {
-			// skip probes: still require auth; sanitize id if present
-			if body.ID != "" && roster.SanitizeID(body.ID) == "" {
+			// skip: auth + known agent id (reject empty / unknown)
+			if body.ID == "" || roster.SanitizeID(body.ID) == "" {
 				http.Error(w, `{"error":"invalid id"}`, 400)
+				return
+			}
+			if !d.rroot.Exists(body.ID) {
+				http.Error(w, `{"error":"unknown agent"}`, 404)
 				return
 			}
 			status, detail, err := d.wh.Post(webhook.Payload{Action: "skip", ID: body.ID, Name: body.Name, Prompt: body.Prompt})
@@ -643,11 +647,13 @@ func checkPromptAuth(r *http.Request, token string) bool {
 	return false
 }
 
-// authorized allows loopback without a token.
-// Non-loopback clients need the prompt token (header) or a valid opaque village_session cookie,
-// even when VILLAGE_LOCAL=1 (that flag must not open Tailscale/LAN peers).
+// authorized allows loopback, or any peer when VILLAGE_LOCAL=1 (dev/trust LAN/Tailscale).
+// Otherwise non-loopback clients need the prompt token (header) or a valid opaque village_session cookie.
 func authorized(r *http.Request, token string) bool {
 	if localRequest(r) {
+		return true
+	}
+	if os.Getenv("VILLAGE_LOCAL") == "1" {
 		return true
 	}
 	if token == "" {
@@ -664,7 +670,7 @@ func authorized(r *http.Request, token string) bool {
 }
 
 // localRequest is true only for loopback peers.
-// VILLAGE_LOCAL=1 never bypasses auth for non-loopback (Tailscale / LAN) clients.
+// VILLAGE_LOCAL=1 opens remotes via authorized() (not here).
 func localRequest(r *http.Request) bool {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

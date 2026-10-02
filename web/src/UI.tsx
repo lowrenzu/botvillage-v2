@@ -249,7 +249,7 @@ export function UI() {
           <input
             value={draft}
             onChange={e => setDraft(e.target.value)}
-            maxLength={280}
+            maxLength={2000}
             disabled={!a}
             placeholder={a ? `Demander à ${a.name}…` : 'Sélectionnez un agent…'}
           />

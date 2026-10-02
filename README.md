@@ -48,11 +48,11 @@ Ouvre http://127.0.0.1:8040/api/health. Attendu : `ok` true, `grokBuild` true si
 | `VILLAGE_PROMPT_TOKEN` | jeton si le port sort de la machine |
 | `VILLAGE_ALLOW` | ids d’agents autorisés (CSV) ; vide = tous |
 | `VILLAGE_EXCLUDE` | ids à cacher (CSV) |
-| `VILLAGE_LOCAL=1` | log clair ; **n’ouvre pas** Tailscale/LAN sans jeton |
+| `VILLAGE_LOCAL=1` | **no token required** (loopback + Tailscale/LAN remotes) |
 
 Vide `VILLAGE_ALLOW` = tous les agents ; `VILLAGE_EXCLUDE` les cache côté serveur. Le client ne filtre que si `health.allowedIds` est non vide.
 
-Le jeton HUD n’est pas la clé webhook. Hors loopback, la première page demande le jeton et pose un cookie `village_session` **opaque** (id aléatoire côté serveur — jamais le secret brut), conservé dans le fichier local `.village-sessions` pour survivre aux redémarrages (ce n’est toujours pas la clé webhook). Le champ jeton HUD alimente seulement le header `X-Village-Token` **en mémoire** (pas de localStorage du secret). Auth durable = cookie HttpOnly (+ `Secure` si TLS / `X-Forwarded-Proto: https`). `VILLAGE_LOCAL=1` ne saute plus l’auth pour les clients non-loopback (Tailscale / LAN) : seuls `127.0.0.1` / `::1` restent ouverts sans jeton. Pose `VILLAGE_PROMPT_TOKEN` (ou un fichier `.prompt-token` gitignoré) dès que tu écoutes `0.0.0.0` ou que tu accèdes via Tailscale.
+Le jeton HUD n’est pas la clé webhook. Hors loopback, la première page demande le jeton et pose un cookie `village_session` **opaque** (id aléatoire côté serveur — jamais le secret brut), conservé dans le fichier local `.village-sessions` pour survivre aux redémarrages (ce n’est toujours pas la clé webhook). Le champ jeton HUD alimente seulement le header `X-Village-Token` **en mémoire** (pas de localStorage du secret). Auth durable = cookie HttpOnly (+ `Secure` si TLS / `X-Forwarded-Proto: https`). Avec `VILLAGE_LOCAL=1`, le gate est sauté pour **tous** les peers (loopback + Tailscale/LAN) — utile en trust LAN. Sans ce flag, hors loopback la première page demande le jeton. Pose `VILLAGE_PROMPT_TOKEN` (ou un fichier `.prompt-token` gitignoré) dès que tu écoutes `0.0.0.0` sans `VILLAGE_LOCAL=1`.
 
 ## Docker
 
@@ -76,10 +76,11 @@ Ouvre http://127.0.0.1:8040/
 
 | Accès | Auth |
 |---|---|
-| Loopback (`127.0.0.1` / `::1`) | ouvert (même avec `VILLAGE_LOCAL=1`) |
-| Tailscale / LAN / `0.0.0.0` | **jeton requis** (`VILLAGE_PROMPT_TOKEN` ou `.prompt-token`) |
+| Loopback (`127.0.0.1` / `::1`) | ouvert (toujours) |
+| Tailscale / LAN + `VILLAGE_LOCAL=1` | **ouvert** — no token required |
+| Tailscale / LAN / `0.0.0.0` (sans `VILLAGE_LOCAL`) | **jeton requis** (`VILLAGE_PROMPT_TOKEN` ou `.prompt-token`) |
 
-`VILLAGE_LOCAL=1` ne bypass **jamais** l’auth hors loopback. Exemple :
+`VILLAGE_LOCAL=1` saute le gate pour remotes (dev/trust LAN/Tailscale). Cookie opaque + session file restent utilisés quand le flag est off. Exemple :
 
 ```bash
 export AGENT_DATA=/home/box/agent-data
