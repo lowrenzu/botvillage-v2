@@ -13,8 +13,9 @@ function TalkBeam({a,b}:{a:Agent;b:Agent}){
  const dir=useMemo(()=>new THREE.Vector3(),[])
  useFrame(()=>{
   const m=mesh.current,g=mid.current;if(!m||!g)return
+  /* Draw only when BOTH agents are API talk (bvState), never a guessed pair. */
   const dx=b.x-a.x,dz=b.z-a.z,d=Math.hypot(dx,dz)
-  if(d<.35){m.visible=false;g.visible=false;return}
+  if(a.bvState!=='talk'||b.bvState!=='talk'||d<.35){m.visible=false;g.visible=false;return}
   m.visible=true;g.visible=true
   m.position.set((a.x+b.x)/2,1.45,(a.z+b.z)/2)
   g.position.set((a.x+b.x)/2,1.78,(a.z+b.z)/2)

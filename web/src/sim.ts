@@ -711,9 +711,9 @@ export function collabPairs(): [Agent, Agent][] {
   const out: [Agent, Agent][] = []
   const seen = new Set<string>()
   for (const a of agents) {
-    if (!a.partnerId || !isTalking(a, now)) continue
+    if (!a.partnerId || a.bvState !== 'talk' || !isTalking(a, now)) continue
     const b = agents.find(o => o.id === a.partnerId)
-    if (!b || !isTalking(b, now)) continue
+    if (!b || b.bvState !== 'talk' || !isTalking(b, now)) continue
     const key = a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id
     if (seen.has(key)) continue
     seen.add(key)

@@ -482,37 +482,39 @@ html, body, #root {
 
 button { font: inherit; }
 
-/* Mini status chip — same size for every bot. Hover does not grow it. */
+/* Mini status chip — same for every bot. One state word. No name, no avatar.
+   Slightly larger ink on a light floor; still a small frosted pill. Hover does not grow it. */
 .tag {
-  background: rgba(255, 255, 255, 0.28);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(255, 252, 248, 0.62);
+  backdrop-filter: blur(8px) saturate(1.15);
+  -webkit-backdrop-filter: blur(8px) saturate(1.15);
+  border: 1px solid rgba(36, 32, 28, 0.18);
   border-radius: 999px;
-  padding: 0 4px;
-  font-size: 8px;
-  font-weight: 600;
-  line-height: 1.15;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
   white-space: nowrap;
-  box-shadow: none;
-  color: rgba(42, 40, 36, 0.78);
+  box-shadow: 0 1px 2px rgba(28, 24, 20, 0.12);
+  color: rgba(22, 18, 16, 0.94);
   font-family: var(--font);
   transform: none;
   pointer-events: none;
 }
 .tag:hover,
 .tag.on {
-  background: rgba(255, 255, 255, 0.38);
-  font-size: 8px;
-  font-weight: 600;
-  padding: 0 4px;
+  background: rgba(255, 252, 248, 0.72);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
   border-radius: 999px;
-  box-shadow: none;
+  box-shadow: 0 1px 2px rgba(28, 24, 20, 0.12);
   outline: none;
 }
-.tag small { color: inherit; display: block; font-size: 8px; font-weight: 600; line-height: 1.15; }
+.tag small { color: inherit; display: block; font-size: 10px; font-weight: 700; line-height: 1.25; letter-spacing: 0.01em; }
 .tag:hover small,
-.tag.on small { font-size: 8px; }
+.tag.on small { font-size: 10px; }
 .dot, .rl i {
   display: inline-block;
   width: 7px; height: 7px;
@@ -861,8 +863,8 @@ button { font: inherit; }
 }
 .frieze-chip.kind-talk b { color: #3d7ab8; }
 
-/* Speech bubble = transcript-only, ONE chip for every bot.
-   Compact 1-line pill, same chip for work and talk. Idle opacity 0. No comic tail. */
+/* Speech bubble = real transcript only, ONE chip for every bot.
+   Hidden (opacity 0) unless a transcript is live. One line. No comic tail. */
 .speech-bubble-html {
   width: max-content;
   max-width: 220px;
@@ -876,11 +878,11 @@ button { font: inherit; }
   align-items: center;
   gap: 5px;
   box-sizing: border-box;
-  max-width: 64px;
-  padding: 3px 8px 3px 6px;
+  max-width: 168px;
+  padding: 2px 8px;
   border-radius: 999px;
   color: rgba(255, 252, 248, 0.96);
-  font: 500 13px/1.25 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  font: 600 11px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
   letter-spacing: -0.025em;
   text-align: left;
   writing-mode: horizontal-tb;
@@ -928,22 +930,20 @@ button { font: inherit; }
     visibility 0s linear 0s;
   animation: sb-float 2.6s ease-in-out infinite;
 }
-/* Idle: fade the chip away — never a sitting card. */
+/* Transcript is the only gate. Idle bvState must not hide a real line. */
 .speech-bubble.is-on.is-idle {
-  opacity: 0;
-  transform: translate3d(0, 4px, 0) scale(0.88);
-  filter: blur(1.2px);
-  pointer-events: none;
-  animation: none;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 /* Work and talk share this chip — no second size, no pulse. */
 .speech-bubble.is-on.is-work { animation: sb-float 2.6s ease-in-out infinite; }
 .speech-bubble.is-on:hover,
 .speech-bubble.is-on.is-hot {
-  max-width: 64px;
-  padding: 3px 8px 3px 6px;
+  max-width: 168px;
+  padding: 2px 8px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 11px;
 }
 .speech-bubble::before {
   content: "";
@@ -956,17 +956,15 @@ button { font: inherit; }
 }
 .speech-bubble-text {
   min-width: 0;
-  max-width: 42px;
+  max-width: 152px;
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: clip;
-  -webkit-mask-image: linear-gradient(90deg, #000 62%, transparent 100%);
-  mask-image: linear-gradient(90deg, #000 62%, transparent 100%);
+  text-overflow: ellipsis;
 }
 .speech-bubble-text:empty { display: none; }
 .speech-bubble:hover .speech-bubble-text,
 .speech-bubble.is-hot .speech-bubble-text {
-  max-width: 42px;
+  max-width: 152px;
   white-space: nowrap;
 }
 @keyframes sb-float {

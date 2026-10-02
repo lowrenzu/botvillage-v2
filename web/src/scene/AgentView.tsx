@@ -77,21 +77,27 @@ const AgentView=memo(function AgentView({a,selected,bvState}:{a:Agent;selected:b
   let tagNode: HTMLElement|null=tagState.current
   if(!tagNode||!tagNode.isConnected) tagNode=document.getElementById('bvtag-'+a.id)
   if(tagNode&&tagNode.textContent!==label) tagNode.textContent=label
-  /* Speech bubble: class toggle only — keep last text while CSS fade/slide exits (don't wipe textContent on off). */
-  /* Chip, not a card: live transcript only. Idle fades. Work pulses. Pointer sets is-hot. */
+  /* Speech bubble: real transcript only. Hidden unless live text — never a status word. */
   if(bubbleWrap.current){
    const now=performance.now()
    const live=!!(a.bubble&&a.bubbleUntil>now)
    if(!live&&a.bubble){a.bubble='';a.bubbleUntil=0}
    const el=bubbleWrap.current
-   const idle=a.bvState!=='work'&&a.bvState!=='talk'&&a.bvState!=='walk'
    el.classList.toggle('is-on', live)
-   el.classList.toggle('is-idle', live&&idle)
+   el.classList.remove('is-idle')
    el.classList.toggle('is-work', live&&a.bvState==='work')
    el.classList.toggle('is-hot', hot.current)
+   const host=el.closest('.speech-bubble-html') as HTMLElement|null
+   if(host){
+    host.style.opacity=live?'1':'0'
+    host.style.visibility=live?'visible':'hidden'
+    host.style.pointerEvents='none'
+   }
    if(live&&bubbleText.current){
     const want=a.bubble||''
     if(bubbleText.current.textContent!==want) bubbleText.current.textContent=want
+   }else if(!live&&bubbleText.current&&bubbleText.current.textContent){
+    bubbleText.current.textContent=''
    }
   }
   if(tagWrap.current){
@@ -142,7 +148,7 @@ const AgentView=memo(function AgentView({a,selected,bvState}:{a:Agent;selected:b
    {avMap&&<mesh position={[0,.52,.5]}><circleGeometry args={[.2,20]}/><meshBasicMaterial map={avMap} toneMapped={false}/></mesh>}
   </group>
   <mesh ref={ring} rotation={[-Math.PI/2,0,0]} position={[0,.04,0]}><ringGeometry args={[.72,selected?.88:.8,32]}/><meshBasicMaterial color={a.color} transparent side={THREE.DoubleSide}/></mesh>
-  {/* Transcript chip — same markup for every agent. .is-on / .is-work / .is-idle / .is-hot from useFrame */}
+  {/* Transcript chip — same markup for every agent. Shown only while a real bubble is live. */}
   <Html position={[0,2.55,0]} center zIndexRange={[50,40]} className="speech-bubble-html">
    <div ref={bubbleWrap} className="speech-bubble" aria-hidden>
     <div ref={bubbleText} className="speech-bubble-text"></div>
