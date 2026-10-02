@@ -126,13 +126,33 @@ function classify(tx: string): EvKind {
   return 'other'
 }
 
+/** Kinds shown on the session day strip — honest logged motion/prompt only. */
+export const SESSION_KINDS: readonly EvKind[] = ['walk', 'work', 'zzz', 'prompt', 'talk']
+
 function log(a: Agent, tx: string) {
   const e: Ev = { t: hm(), a: a.name, tx, c: a.color, kind: classify(tx) }
   feed.unshift(e)
   a.log.unshift(e)
-  feed.length = Math.min(feed.length, 40)
-  a.log.length = Math.min(a.log.length, 12)
+  /* Keep enough for a compact session day strip (chronological chips in UI). */
+  feed.length = Math.min(feed.length, 80)
+  a.log.length = Math.min(a.log.length, 16)
   emit()
+}
+
+/**
+ * Chronological (oldest→newest) session chips from live `feed`.
+ * Only real walk/work/zzz/prompt/talk events — no Idle / Session ouverte / other.
+ */
+export function sessionDayTimeline(limit = 36): Ev[] {
+  const kinds = new Set<EvKind>(SESSION_KINDS)
+  const out: Ev[] = []
+  for (let i = feed.length - 1; i >= 0; i--) {
+    const e = feed[i]
+    const k = e.kind || 'other'
+    if (!kinds.has(k)) continue
+    out.push(e)
+  }
+  return out.length > limit ? out.slice(out.length - limit) : out
 }
 
 const free = (r: Room) => {

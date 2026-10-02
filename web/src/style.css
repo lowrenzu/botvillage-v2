@@ -702,6 +702,67 @@ button { font: inherit; }
   border-color: rgba(160, 90, 74, 0.22);
 }
 
+/* —— Mini day timeline (session strip) —— */
+.day-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 0 2px 2px;
+}
+.day-strip-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 2px;
+  min-width: 0;
+}
+.day-strip-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mt);
+}
+.day-strip-hint {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--mu);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.day-frieze {
+  padding-top: 0;
+}
+.day-strip-end {
+  flex: 0 0 1px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.frieze-chip time {
+  font-variant-numeric: tabular-nums;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--mu);
+  flex-shrink: 0;
+}
+.frieze-chip.day-empty {
+  max-width: none;
+  opacity: .75;
+}
+.frieze-chip.kind-walk b { color: #5a6a7a; }
+.frieze-chip.kind-work b { color: #2f6b4f; }
+.frieze-chip.kind-zzz {
+  background: rgba(154, 160, 166, 0.18);
+}
+.frieze-chip.kind-prompt b { color: #8a6a2a; }
+
 .frieze {
   display: flex;
   gap: 6px;
@@ -723,7 +784,7 @@ button { font: inherit; }
   align-items: center;
   gap: 5px;
   flex-shrink: 0;
-  max-width: 140px;
+  max-width: 168px;
   padding: 4px 9px 4px 7px;
   border-radius: var(--r-pill);
   background: rgba(255, 255, 255, 0.55);
@@ -831,6 +892,7 @@ img.agent-av { width: 36px; height: 36px; border-radius: 12px; }
   .rail-toggle { display: none; }
   .hud-rail.collapsed .rail-stats,
   .hud-rail.collapsed .roster,
+  .hud-rail.collapsed .day-strip,
   .hud-rail.collapsed .frieze,
   .hud-rail.collapsed .rail-body,
   .hud-rail.collapsed .prompt-block { display: none; }

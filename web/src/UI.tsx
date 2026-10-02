@@ -1,6 +1,7 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import {
   agents, feed, link, ui, useSim, sendPrompt, selectAgent, toggleFollow,
+  sessionDayTimeline,
   type Agent, type Ev, type EvKind, type PromptPhase,
 } from './sim'
 
@@ -78,7 +79,11 @@ export function UI() {
   const collab = agents.filter(x => x.state === 'collab' || x.bvState === 'talk').length
   const sleeping = agents.filter(x => x.state === 'sleep' || x.bvState === 'zzz').length
   const live = link === 'live'
-  const frieze = feed.slice(0, 10)
+  const dayStrip = sessionDayTimeline(36)
+  const dayEndRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    dayEndRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'end', block: 'nearest' })
+  }, [dayStrip.length, dayStrip[dayStrip.length - 1]?.t, dayStrip[dayStrip.length - 1]?.tx])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -159,21 +164,39 @@ export function UI() {
         </div>
       )}
 
-      {frieze.length > 0 && (
-        <div className="frieze" aria-label="Activité récente">
-          {frieze.map((e, i) => {
-            const k = e.kind || 'other'
-            return (
-              <span key={i} className={'frieze-chip kind-' + k} title={`${e.a} · ${e.tx} · ${e.t.slice(0, 5)}`}>
-                <i style={{ background: e.c }} />
-                <b>{KIND_ICON[k]}</b>
-                <em>{e.a.split(' ')[0]}</em>
-                <span>{friezeLabel(e)}</span>
-              </span>
-            )
-          })}
+      <div className="day-strip" aria-label="Mini timeline de session">
+        <div className="day-strip-head">
+          <span className="day-strip-title">Session</span>
+          <span className="day-strip-hint">marche · travail · zzz · consigne · discussion</span>
         </div>
-      )}
+        <div className="frieze day-frieze" role="list">
+          {dayStrip.length === 0 ? (
+            <span className="frieze-chip kind-other day-empty" role="listitem">
+              <b>·</b>
+              <span>en attente d’événements réels</span>
+            </span>
+          ) : (
+            dayStrip.map((e, i) => {
+              const k = (e.kind || 'other') as EvKind
+              return (
+                <span
+                  key={i + ':' + e.t + ':' + e.a + ':' + e.tx}
+                  role="listitem"
+                  className={'frieze-chip kind-' + k}
+                  title={`${e.t.slice(0, 5)} · ${e.a} · ${e.tx}`}
+                >
+                  <time>{e.t.slice(0, 5)}</time>
+                  <i style={{ background: e.c }} />
+                  <b>{KIND_ICON[k]}</b>
+                  <em>{e.a.split(' ')[0]}</em>
+                  <span>{friezeLabel(e)}</span>
+                </span>
+              )
+            })
+          )}
+          <div ref={dayEndRef} className="day-strip-end" aria-hidden />
+        </div>
+      </div>
 
       <div className="rail-body">
         {a ? <AgentCard a={a} mates={mates} /> : (
