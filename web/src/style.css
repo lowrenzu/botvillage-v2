@@ -677,6 +677,25 @@ button { font: inherit; }
   50% { opacity: 0.55; transform: scale(0.85); }
 }
 
+.roster-nofeed {
+  margin: 0 4px 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  line-height: 1.4;
+  color: #8a6a4a;
+  background: rgba(180, 140, 90, 0.14);
+  border: 1px solid rgba(180, 140, 90, 0.35);
+}
+.chip-grok-build {
+  border-color: rgba(94, 155, 214, 0.55) !important;
+  color: #3a6fa0 !important;
+  background: rgba(94, 155, 214, 0.12) !important;
+}
 .roster-phase {
   margin: 0 0 0 auto;
   padding: 1px 6px;
@@ -689,6 +708,7 @@ button { font: inherit; }
   line-height: 1.4;
   border: 1px solid transparent;
 }
+.roster-nofeed + .roster-phase { margin-left: 4px; }
 .roster-phase.phase-sent {
   color: #1f7a4d;
   background: rgba(31, 122, 77, 0.12);
@@ -834,19 +854,32 @@ button { font: inherit; }
 .frieze-chip.kind-talk b { color: #3d7ab8; }
 
 /* Speech bubble = real transcript only. Hidden by default; .is-on from useFrame (same for every agent). */
+.speech-bubble-html {
+  /* Keep drei's Html anchor from collapsing the content to a 1ch column. */
+  width: max-content;
+  max-width: 220px;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
 .speech-bubble {
   position: relative;
-  max-width: 160px;
-  min-width: 36px;
+  display: inline-block;
+  width: max-content;
+  min-width: 72px;
+  max-width: 220px;
+  box-sizing: border-box;
   padding: 6px 10px;
   border-radius: 12px 12px 12px 4px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.94) !important;
   border: 1px solid rgba(28, 28, 30, 0.12);
   box-shadow: 0 4px 14px rgba(20, 24, 32, 0.12);
-  color: #2a2e34;
+  color: #2a2e34 !important;
   font: 600 12px/1.35 "Plus Jakarta Sans", system-ui, sans-serif;
   text-align: center;
-  white-space: pre-wrap;
+  writing-mode: horizontal-tb;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
   word-break: break-word;
   pointer-events: none;
   transform: translateY(-4px);
@@ -865,7 +898,7 @@ button { font: inherit; }
   bottom: -6px;
   width: 10px;
   height: 10px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.94) !important;
   border-right: 1px solid rgba(28, 28, 30, 0.12);
   border-bottom: 1px solid rgba(28, 28, 30, 0.12);
   transform: rotate(45deg);
@@ -959,7 +992,26 @@ img.agent-av { width: 36px; height: 36px; border-radius: 12px; }
 }
 .roster.dense .vote-btns { gap: 2px; }
 .roster.dense .vote-n { font-size: 10px; min-width: 12px; }
-.roster.dense .roster-phase {
+.roster.dense .roster-nofeed {
+  margin: 0 4px 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  line-height: 1.4;
+  color: #8a6a4a;
+  background: rgba(180, 140, 90, 0.14);
+  border: 1px solid rgba(180, 140, 90, 0.35);
+}
+.chip-grok-build {
+  border-color: rgba(94, 155, 214, 0.55) !important;
+  color: #3a6fa0 !important;
+  background: rgba(94, 155, 214, 0.12) !important;
+}
+.roster-phase {
   font-size: 9px;
   padding: 1px 5px;
 }
@@ -1000,9 +1052,26 @@ img.agent-av { width: 36px; height: 36px; border-radius: 12px; }
 
 .honest-note {
   margin: 0 12px 6px;
+  padding: 4px 8px;
   font-size: 10px;
-  font-weight: 500;
-  color: var(--mt);
-  opacity: 0.75;
+  font-weight: 600;
+  color: #3d5a7a;
+  background: rgba(126, 182, 232, 0.14);
+  border: 1px dashed rgba(126, 182, 232, 0.55);
+  border-radius: 6px;
   letter-spacing: 0.01em;
+}
+.beam-deduit {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #2a4a6a;
+  background: rgba(232, 242, 252, 0.88);
+  border: 1px dashed rgba(90, 140, 190, 0.7);
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(20, 30, 40, 0.12);
 }
