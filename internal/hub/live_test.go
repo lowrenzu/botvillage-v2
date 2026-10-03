@@ -3,9 +3,9 @@ package hub
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -138,7 +138,7 @@ func TestSyncGatewayRunningClearsWhenStopped(t *testing.T) {
 		t.Fatal("gatewayHold should clear")
 	}
 
-	// Gateway not busy wins: even long transcript until must not sticky-work.
+	// Seen, not running, but a transcript work hold (longer than liveWorkHold) stays work.
 	h.bots[id].bot.State = "work"
 	h.bots[id].gatewayHold = true
 	h.bots[id].until = time.Now().Add(transcriptWorkHold)
@@ -146,8 +146,71 @@ func TestSyncGatewayRunningClearsWhenStopped(t *testing.T) {
 	h.SyncGatewayRunning()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.bots[id].bot.State != "idle" {
-		t.Fatalf("gateway stop must clear work immediately, got %s", h.bots[id].bot.State)
+	if h.bots[id].bot.State != "work" {
+		t.Fatalf("transcript work hold must survive not-running poll, got %s", h.bots[id].bot.State)
+	}
+	if h.bots[id].gatewayHold {
+		t.Fatal("seen not-running should clear gatewayHold")
+	}
+	if !h.bots[id].until.After(time.Now().Add(liveWorkHold)) {
+		t.Fatal("transcript until was cleared")
+	}
+}
+
+func TestSyncGatewayOmittedIDKeepsHold(t *testing.T) {
+	dir := t.TempDir()
+	ids := []string{"uuid-seen", "uuid-running-omitted", "uuid-transcript-omitted", "uuid-idle-omitted"}
+	for _, id := range ids {
+		if err := os.MkdirAll(filepath.Join(dir, "agents", id), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		body := []byte(`{"name":"` + id + `"}`)
+		if err := os.WriteFile(filepath.Join(dir, "agents", id, "profile.json"), body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only the stopped agent is present. The others are omitted.
+		_ = json.NewEncoder(w).Encode([]gatewayAgent{
+			{ID: "uuid-seen", Name: "uuid-seen", IsRunning: false},
+		})
+	}))
+	defer srv.Close()
+	host, portStr := mustSplitHostPort(srv.Listener.Addr().String())
+	raw, _ := json.Marshal(map[string]any{"port": mustAtoi(portStr), "host": host, "scheme": "http"})
+	if err := os.WriteFile(filepath.Join(dir, "gateway.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := New(roster.Root{AgentData: dir})
+	if _, err := h.RefreshRoster(); err != nil {
+		t.Fatal(err)
+	}
+	h.mu.Lock()
+	h.bots["uuid-seen"].bot.State = "work"
+	h.bots["uuid-seen"].gatewayHold = true
+	h.bots["uuid-running-omitted"].bot.State = "work"
+	h.bots["uuid-running-omitted"].gatewayHold = true
+	h.bots["uuid-transcript-omitted"].bot.State = "work"
+	h.bots["uuid-transcript-omitted"].gatewayHold = false
+	h.bots["uuid-transcript-omitted"].until = time.Now().Add(transcriptWorkHold)
+	h.bots["uuid-idle-omitted"].bot.State = "idle"
+	h.mu.Unlock()
+
+	h.SyncGatewayRunning()
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.bots["uuid-seen"].bot.State != "idle" || h.bots["uuid-seen"].gatewayHold {
+		t.Fatalf("seen not-running with no hold should idle, got %s hold %v", h.bots["uuid-seen"].bot.State, h.bots["uuid-seen"].gatewayHold)
+	}
+	if h.bots["uuid-running-omitted"].bot.State != "work" || !h.bots["uuid-running-omitted"].gatewayHold {
+		t.Fatalf("omitted id still gatewayHold must stay work, got %s hold %v", h.bots["uuid-running-omitted"].bot.State, h.bots["uuid-running-omitted"].gatewayHold)
+	}
+	if h.bots["uuid-transcript-omitted"].bot.State != "work" {
+		t.Fatalf("omitted id in transcript hold must stay work, got %s", h.bots["uuid-transcript-omitted"].bot.State)
+	}
+	if h.bots["uuid-idle-omitted"].bot.State != "idle" {
+		t.Fatalf("omitted idle must not become work, got %s", h.bots["uuid-idle-omitted"].bot.State)
 	}
 }
 

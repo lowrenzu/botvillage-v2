@@ -136,11 +136,9 @@ const hm = () => new Date().toTimeString().slice(0, 8)
 
 function classify(tx: string): EvKind {
   const t = tx.toLowerCase()
+  /* Frieze must not invent walk/talk/work from keywords in a line. */
   if (t.startsWith('←') || t.includes('consigne') || t.includes('envoyé') || t === '…?' || t === 'hors ligne') return 'prompt'
   if (t.includes('zzz') || t.includes('dort')) return 'other'
-  if (t.includes('rejoint') || t.includes('déplacement') || t.includes('marche')) return 'walk'
-  if (t.includes('parle') || t.includes('discussion') || t.includes('collab')) return 'talk'
-  if (t.includes('travaille') || t.includes('tâche')) return 'work'
   return 'other'
 }
 
@@ -289,6 +287,11 @@ function enterWaypoints(r: Room, q: Slot): Pt[] {
  * Never cuts diagonally through desks / racks / shelves / meeting table.
  */
 export function go(a: Agent, r: Room) {
+  /* API work is not a trip: no path, no walk pose, no « Rejoint » log. */
+  if (a.bvState === 'work') {
+    if (!a.path.length) a.state = 'work'
+    return
+  }
   const q = free(r)
   if (!q) return
   if (a.room === r && !a.path.length) {
@@ -617,92 +620,21 @@ function isTalking(a: Agent, _now: number) {
   return a.bvState === 'talk'
 }
 
-function pairAgents(a: Agent, b: Agent, now: number) {
-  a.partnerId = b.id
-  b.partnerId = a.id
-  a.talkUntil = Math.max(a.talkUntil, now + 6000)
-  b.talkUntil = Math.max(b.talkUntil, now + 6000)
-  a.state = a.path.length ? 'walk' : 'collab'
-  b.state = b.path.length ? 'walk' : 'collab'
-  const key = a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id
-  a.announcedPartner = key
-  b.announcedPartner = key
+function pairAgents(_a: Agent, _b: Agent, _now: number) {
+  /* No local pairing of two API talk bots. */
 }
 
 /** Walk toward peer inside the same room (short local path, no door hop). */
-function approachPeer(a: Agent, b: Agent) {
-  const dx = b.x - a.x, dz = b.z - a.z
-  const d = Math.hypot(dx, dz)
-  if (d < 0.05) return
-  faceToward(a, b.x, b.z)
-  if (d > 2.0 && !a.path.length) {
-    const keep = 1.35
-    const t = (d - keep) / d
-    a.path = [{ x: a.x + dx * t, z: a.z + dz * t }]
-    a.state = 'walk'
-  }
+function approachPeer(_a: Agent, _b: Agent) {
+  /* No invented short walk toward a peer. */
 }
 
 /**
  * Pair talk/collab agents, send loners to Réunion, walk peers together.
  * Uses real bvState / talkUntil / collab — no fake progress %.
  */
-function resolveMeetups(now: number) {
-  const talkers = agents.filter(a => isTalking(a, now) && a.bvState !== 'zzz')
-  for (const a of agents) {
-    if (!isTalking(a, now) && a.partnerId) clearPartner(a)
-  }
-  for (const a of talkers) {
-    if (!a.partnerId) continue
-    const p = agents.find(o => o.id === a.partnerId)
-    if (!p || !isTalking(p, now)) {
-      a.partnerId = null
-      a.announcedPartner = null
-    }
-  }
-  const unpaired = talkers.filter(a => !a.partnerId)
-  for (let i = 0; i < unpaired.length; i++) {
-    const a = unpaired[i]
-    if (a.partnerId) continue
-    let b = unpaired.find(o => o !== a && !o.partnerId && o.room === a.room)
-    if (!b) b = unpaired.find(o => o !== a && !o.partnerId)
-    if (!b) break
-    pairAgents(a, b, now)
-  }
-  const seen = new Set<string>()
-  for (const a of talkers) {
-    if (!a.partnerId || seen.has(a.id)) continue
-    const b = agents.find(o => o.id === a.partnerId)
-    if (!b) continue
-    seen.add(a.id); seen.add(b.id)
-    if (a.room !== b.room) {
-      const meet = RM.meeting
-      if (a.room !== meet && !a.path.length) go(a, meet)
-      if (b.room !== meet && !b.path.length) go(b, meet)
-      continue
-    }
-    /* Face each other whenever paired — even if peer still walking in. */
-    if (!a.path.length) facePartner(a)
-    if (!b.path.length) facePartner(b)
-    if (!a.path.length && !b.path.length) {
-      approachPeer(a, b)
-      approachPeer(b, a)
-      if (!a.path.length && !b.path.length) {
-        a.state = 'collab'
-        b.state = 'collab'
-        facePartner(a)
-        facePartner(b)
-      }
-    } else {
-      /* Standing partner faces walker when already close. */
-      if (!a.path.length && partnerClose(a, b)) facePartner(a)
-      if (!b.path.length && partnerClose(b, a)) facePartner(b)
-    }
-  }
-  for (const a of talkers) {
-    if (a.partnerId) continue
-    if (a.bvState === 'talk' && a.room.id !== 'meeting' && !a.path.length) go(a, RM.meeting)
-  }
+function resolveMeetups(_now: number) {
+  /* Do not pair talk bots, invent a collab pose, or walk them to Réunion. */
 }
 
 /** Active talk beams for Scene — unique unordered pairs (local deduction, not transcript). */
@@ -762,10 +694,7 @@ export function step(dt: number) {
         clearPartner(a)
       }
       a.state = animFromBv(a)
-      /* Live honesty: work must be at a desk — no standing in lab/servers. */
-      if (!demoMode && a.bvState === 'work' && a.room.t !== 'desk') {
-        go(a, roomForState(a, 'work'))
-      }
+      /* Work away from a desk stays put. Do not walk them to a desk. */
       /* Demo-only ambient stroll — live never invents motion. */
       if (demoMode) {
         a.timer -= dt

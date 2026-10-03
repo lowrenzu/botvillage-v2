@@ -156,6 +156,7 @@ func (h *Hub) SyncGatewayRunning() {
 	now := time.Now()
 	var acts []Activity
 	busyRosterIDs := make(map[string]struct{})
+	seenRosterIDs := make(map[string]struct{})
 	var matchedNames []string
 	var unmatched []string
 	var mapLines []string
@@ -175,6 +176,7 @@ func (h *Hub) SyncGatewayRunning() {
 			mapLines = append(mapLines, label+"(unmatched id="+a.ID+" run="+strconv.FormatBool(a.IsRunning)+")")
 			continue
 		}
+		seenRosterIDs[rt.bot.ID] = struct{}{}
 		mapped := rt.bot.State
 		if busy {
 			busyRosterIDs[rt.bot.ID] = struct{}{}
@@ -205,23 +207,23 @@ func (h *Hub) SyncGatewayRunning() {
 		mapLines = append(mapLines, rt.bot.Name+" id="+shortID8(rt.bot.ID)+" run="+strconv.FormatBool(a.IsRunning)+" busy="+strconv.FormatBool(busy)+"→"+mapped)
 	}
 
-	// Clear busy when gateway says not running — idle immediately (no sticky work/zzz).
-	// Transcript may keep "talk" only; work/zzz always drop when !busy.
+	// Omitted ids are not an idle signal: keep gatewayHold (last isRunning)
+	// and any transcript hold. Do not invent work for bots that are neither.
+	// Seen and not running: idle only with no transcript hold. until past
+	// liveWorkHold is a transcript hold; the 8s gateway bridge is not.
 	for id, rt := range h.bots {
 		if _, still := busyRosterIDs[id]; still {
 			continue
 		}
-		rt.gatewayHold = false
-		if rt.bot.State == "zzz" {
-			rt.until = time.Time{}
-			rt.bot.State = "idle"
-			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
-			rt.bot.Updated = now
-			acts = append(acts, Activity{Type: "state", AgentID: id, State: "idle", Role: rt.bot.LastRole})
+		if _, seen := seenRosterIDs[id]; !seen {
 			continue
 		}
-		if rt.bot.State == "work" {
-			// Gateway not busy → idle now (no sticky liveWorkHold).
+		rt.gatewayHold = false
+		transcriptHold := !rt.until.IsZero() && rt.until.After(now.Add(liveWorkHold))
+		if transcriptHold {
+			continue
+		}
+		if rt.bot.State == "zzz" || rt.bot.State == "work" {
 			rt.until = time.Time{}
 			rt.bot.State = "idle"
 			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
