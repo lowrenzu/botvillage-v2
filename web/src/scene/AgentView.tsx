@@ -5,9 +5,9 @@ import * as THREE from 'three'
 import {ui,selectAgent,CLICK_MOVE_MAX,type Agent,type BvState} from '../sim'
 import { initTex } from './labels'
 
-/** Scene tag from API bvState only. Idle stays unlabeled. */
+/** Scene tag from API bvState only. Same word for every bot. */
 export function bvTagLabel(bv: string): string {
- return bv === 'work' ? 'Travail' : bv === 'talk' ? 'Parle' : bv === 'walk' ? 'Marche' : ''
+ return bv === 'work' ? 'Travail' : bv === 'talk' ? 'Parle' : bv === 'walk' ? 'Marche' : 'Idle'
 }
 /** HUD rail width + margin — tags hide when projected into this strip. */
 const RAIL_PAD=380
@@ -207,12 +207,12 @@ const AgentView=memo(function AgentView({a,selected,bvState}:{a:Agent;selected:b
     <div ref={bubbleText} className="speech-bubble-text"></div>
    </div>
   </Html>
-  {/* Status chip only while work, talk, or walk. Idle has no label. */}
-  {bvTagLabel(bvState)&&<Html position={[0,2.2,0]} center zIndexRange={[30,20]} style={{pointerEvents:'none'}}>
+  {/* Status chip for every bot. Word only — no name, no avatar. */}
+  <Html position={[0,2.2,0]} center zIndexRange={[30,20]} style={{pointerEvents:'none'}}>
    <div ref={tagWrap} className="tag">
     <small id={'bvtag-'+a.id} ref={tagState as any}>{bvTagLabel(bvState)}</small>
    </div>
-  </Html>}
+  </Html>
  </group>})
 
 export { AgentView }

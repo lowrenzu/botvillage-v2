@@ -7,21 +7,21 @@ import {
 } from './sim'
 
 const ST: Record<string, string> = {
-  work: 'Travaille',
-  collab: 'Discussion · déduit',
+  work: 'Travail',
+  collab: 'Parle',
   walk: 'Marche',
-  sleep: 'Repos',
-  idle: 'Repos',
+  sleep: 'Idle',
+  idle: 'Idle',
 }
 const BV: Record<string, string> = {
-  idle: 'Repos',
+  idle: 'Idle',
   walk: 'Marche',
-  work: 'Travaille',
-  talk: 'Discussion',
-  zzz: 'Repos',
+  work: 'Travail',
+  talk: 'Parle',
+  zzz: 'Idle',
 }
 const PHASE: Record<PromptPhase, string> = {
-  idle: 'Repos',
+  idle: 'Idle',
   sent: 'Envoyée',
   acked: 'Reçue',
   silent: 'Sans réponse',
@@ -51,18 +51,14 @@ const initial = (name: string) => (name.trim()[0] || '?').toUpperCase()
 function friezeLabel(e: Ev): string {
   const k = e.kind || 'other'
   if (k === 'prompt') return 'Consigne'
-  if (k === 'zzz') return 'Repos'
-  if (k === 'walk') return e.tx.startsWith('Rejoint') ? e.tx.replace('Rejoint : ', '→ ') : 'Marche'
+  if (k === 'zzz') return 'Idle'
+  if (k === 'walk') return 'Marche'
   if (k === 'work') {
-    /* Status word stays « Travaille ». A real transcript line is shown as itself. */
-    if (e.tx.startsWith('Travaille')) return 'Travaille'
+    /* Status word is « Travail ». A real transcript line is shown as itself. */
+    if (e.tx.startsWith('Travaille') || e.tx.startsWith('Travail')) return 'Travail'
     return e.tx.length > 16 ? e.tx.slice(0, 14) + '…' : e.tx
   }
   if (k === 'talk') {
-    if (e.tx.startsWith('Discussion avec') || e.tx.startsWith('Collabore avec')) {
-      const who = e.tx.replace(/^Discussion avec |^Collabore avec /, '')
-      return '◎ ' + (who.length > 12 ? who.slice(0, 10) + '…' : who)
-    }
     if (e.tx.startsWith('Parle') || e.tx.startsWith('En discussion')) return 'Parle'
     return e.tx.length > 16 ? e.tx.slice(0, 14) + '…' : e.tx
   }
@@ -142,7 +138,7 @@ export function UI() {
       <div className="rail-stats">
         <span><i className="dot-live" />{agents.length} au roster</span>
         <span>{working} au travail</span>
-        <span>{collab ? collab + ' en discussion' : sleeping + ' au repos'}</span>
+        <span>{collab ? collab + ' Parle' : sleeping + ' Idle'}</span>
       </div>
 
       {agents.length > 0 && (
