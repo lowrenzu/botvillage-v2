@@ -296,8 +296,9 @@ function makeAgent(b: BotJSON, index: number): Agent {
     tt: 0,
     promptPhase: 'idle',
     talkUntil: 0,
-    bubble: actionLine(b.bubble),
-    bubbleUntil: actionLine(b.bubble) ? Number.POSITIVE_INFINITY : 0,
+    /* First /api/bots snapshot is not a live action. Ignore its bubble. */
+    bubble: '',
+    bubbleUntil: 0,
     partnerId: null,
     announcedPartner: null,
     hasTranscript: !!b.hasTranscript,
@@ -362,14 +363,8 @@ export function syncRoster(bots: BotJSON[]) {
       a.hasAvatar = !!b.hasAvatar
       a.hasTranscript = !!b.hasTranscript
       if (b.lastRole) a.role = b.lastRole
-      const act = actionLine(b.bubble)
-      if (act) {
-        a.bubble = act
-        a.bubbleUntil = Number.POSITIVE_INFINITY
-      } else if (!actionLine(a.bubble)) {
-        a.bubble = ''
-        a.bubbleUntil = 0
-      }
+      /* Roster/API refresh is a snapshot, not a new line. Do not apply b.bubble.
+         A live bubble arrives only on a later WS message (applyActivity). */
       /* hasTranscript never gates bvState — tag reads API state only. */
       const st = canonBv(b.state)
       if (st !== a.bvState) applyBvState(a, st, false)
@@ -399,7 +394,6 @@ function clearBubble(a: Agent) {
 }
 
 export function applyBvState(a: Agent, state: BvState, announce = true) {
-  const prev = a.bvState
   /* Live: zzz banned — coerce to idle (no sleep pose / Zzz log). */
   if (state === 'zzz') state = 'idle'
   a.bvState = state
@@ -410,7 +404,6 @@ export function applyBvState(a: Agent, state: BvState, announce = true) {
   }
   if (state === 'idle') {
     clearBubble(a)
-    if (announce && prev !== 'idle') log(a, 'Idle · ' + a.room.n)
     if (a.room.id !== a.home && !a.path.length) go(a, RM[a.home])
     else if (!a.path.length) { a.state = 'idle'; a.yaw = a.slot.f }
     emit()

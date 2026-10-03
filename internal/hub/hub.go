@@ -236,22 +236,8 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	bots, _ := h.RefreshRoster()
 	_ = conn.WriteJSON(Activity{Type: "roster", Bots: bots})
-	// One real line already on disk (existing jsonl only). No state change,
-	// so gateway work/idle is not invented or cleared. No file is written.
-	for _, b := range bots {
-		text := b.Bubble
-		if text == "" && b.Transcript != "" {
-			var err error
-			text, err = tail.LastAction(b.Transcript)
-			if err != nil {
-				continue
-			}
-		}
-		if text == "" {
-			continue
-		}
-		_ = conn.WriteJSON(Activity{Type: "state", AgentID: b.ID, Bubble: text})
-	}
+	// No historical seed. A bubble is set only by HandleLine when a new
+	// jsonl line arrives after tailing started (snippets.ActionLine).
 
 	defer func() {
 		h.mu.Lock()

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"botvillage/internal/snippets"
-	"botvillage/internal/tail"
 )
 
 // Bot is a villager on the island.
@@ -137,11 +136,7 @@ func (r Root) loadBot(id string, idx int) Bot {
 	}
 	b.Transcript = r.findTranscript(id)
 	b.HasTranscript = transcriptNonempty(b.Transcript)
-	if b.HasTranscript {
-		if act, err := tail.LastAction(b.Transcript); err == nil {
-			b.Bubble = act
-		}
-	}
+	// Bubble stays empty. A historical last jsonl line is not a live action.
 	return b
 }
 
