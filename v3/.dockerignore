@@ -1,0 +1,29 @@
+.git
+.gitignore
+*.md
+!README.md
+
+# secrets / local runtime — never send to build context
+webhook.json
+wakes.jsonl
+*.log
+.env
+.env.*
+
+# local / demo data
+demo-data/
+agent-data/
+
+# binaries
+botvillage
+botvillage-*
+*.exe
+
+# frontend deps + committed SPA (rebuilt in image)
+web/node_modules/
+web/dist/
+static/
+
+# tests / misc
+testdata/
+island-prompt.md

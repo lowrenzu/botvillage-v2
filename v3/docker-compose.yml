@@ -1,0 +1,32 @@
+# One-shot office with YOUR agent-data (never bake secrets into the image).
+#
+#   AGENT_DATA=/home/box/agent-data docker compose up --build
+#   # optional webhook:
+#   WEBHOOK_JSON=./webhook.json AGENT_DATA=/home/box/agent-data docker compose up --build
+#
+services:
+  botvillage:
+    build: .
+    image: botvillage:local
+    ports:
+      # Host loopback only. Remove 127.0.0.1 if you intentionally open Tailscale.
+      - "127.0.0.1:8040:8040"
+    environment:
+      AGENT_DATA: /data
+      # Host requests reach the container via the docker bridge (not loopback),
+      # so auth is needed even for 127.0.0.1 host access: a token…
+      VILLAGE_PROMPT_TOKEN: ${VILLAGE_PROMPT_TOKEN:-}   # never the webhook key
+      # …or trust-local mode. Defaults to 1 ONLY because ports publish on
+      # 127.0.0.1 below. If you open that publish (Tailscale/LAN), run with
+      # VILLAGE_LOCAL=0 and set VILLAGE_PROMPT_TOKEN — otherwise the whole
+      # LAN gets the office with no token.
+      VILLAGE_LOCAL: ${VILLAGE_LOCAL:-1}
+      # VILLAGE_WS_ORIGINS: "http://my-box.tailnet.ts.net:8040"
+      # VILLAGE_GROKBUILD_ID: ""   # optional Grok Build agent UUID (else only target: grok-build routes to xAI)
+      # XAI_API_KEY / mount xai.json if you use Grok Build
+    volumes:
+      # Host path → container /data (set AGENT_DATA env when invoking compose)
+      - ${AGENT_DATA:-./agent-data}:/data:ro
+      # Optional: real webhook.json (defaults to the committed example = no secrets)
+      - ${WEBHOOK_JSON:-./webhook.json.example}:/app/webhook.json:ro
+    restart: unless-stopped

@@ -1,0 +1,771 @@
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"embed"
+	"encoding/hex"
+	"encoding/json"
+	"flag"
+	"io/fs"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"botvillage/v3/internal/avatars"
+	"botvillage/v3/internal/grokbuild"
+	"botvillage/v3/internal/hub"
+	"botvillage/v3/internal/roster"
+	"botvillage/v3/internal/skills"
+	"botvillage/v3/internal/tail"
+	"botvillage/v3/internal/webhook"
+)
+
+//go:embed all:static
+var staticFS embed.FS
+
+// Version is the botvillage release (v3: audit hardening, no demo, perf).
+const Version = "3.0.0"
+
+func main() {
+	listen := flag.String("listen", "127.0.0.1:8040", "listen address (default loopback; pass 0.0.0.0:8040 only on purpose)")
+	agentData := flag.String("agent-data", envOr("AGENT_DATA", "."), "AGENT_DATA root")
+	flag.Parse()
+
+	rootDir, _ := os.Getwd()
+	webhookPath := filepath.Join(rootDir, "webhook.json")
+	wakesPath := filepath.Join(rootDir, "wakes.jsonl")
+	if err := loadFromDisk(); err != nil {
+		log.Printf("sessions: %v", err)
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	// Real agents only: the roster always comes from AGENT_DATA on disk.
+	dataRoot := *agentData
+
+	rroot := roster.Root{AgentData: dataRoot}
+	h := hub.New(rroot)
+	if _, err := h.RefreshRoster(); err != nil {
+		log.Printf("roster: %v", err)
+	}
+
+	tw := tail.New()
+	if err := h.TrackAll(tw); err != nil {
+		log.Printf("track: %v", err)
+	}
+	go func() {
+		if err := tw.Run(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("tail: %v", err)
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case line := <-tw.Events():
+				h.HandleLine(line)
+			}
+		}
+	}()
+	go func() {
+		t := time.NewTicker(1 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				h.Tick()
+			}
+		}
+	}()
+	go func() {
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if _, err := h.RefreshRoster(); err == nil {
+					_ = h.TrackAll(tw)
+					h.BroadcastRoster()
+				}
+			}
+		}
+	}()
+
+	wh := webhook.New(webhookPath, wakesPath)
+	_ = wh.Load()
+	gb := grokbuild.FromEnv(xaiPath())
+	wh.EnsureWakesPerms()
+
+	promptTok := resolvePromptToken()
+	if promptTok == "" {
+		log.Printf("prompt auth: loopback only without token (set VILLAGE_PROMPT_TOKEN or .prompt-token before exposing the port)")
+	} else {
+		log.Printf("prompt auth: non-loopback requires VILLAGE_PROMPT_TOKEN (webhook key is never sent to the browser)")
+	}
+	if os.Getenv("VILLAGE_LOCAL") == "1" && strings.HasPrefix(*listen, "0.0.0.0") {
+		log.Printf("VILLAGE_LOCAL=1 with %s: remotes are open (dev/trust LAN/Tailscale) — no token gate", *listen)
+	}
+
+	mux := http.NewServeMux()
+	registerRoutes(mux, routeDeps{
+		rroot:     rroot,
+		h:         h,
+		wh:        wh,
+		grok:      gb,
+		promptTok: promptTok,
+		limiter:   newPromptLimiter(12),
+		static:    staticFS,
+	})
+
+	srv := &http.Server{Addr: *listen, Handler: withLog(mux)}
+	go func() {
+		<-ctx.Done()
+		shCtx, c := context.WithTimeout(context.Background(), 3*time.Second)
+		defer c()
+		_ = srv.Shutdown(shCtx)
+	}()
+
+	log.Printf("botvillage v%s listening on http://%s (agent-data=%s webhook=%v)", Version, *listen, dataRoot, wh.Configured())
+	cert, key := os.Getenv("VILLAGE_TLS_CERT"), os.Getenv("VILLAGE_TLS_KEY")
+	var err error
+	if cert != "" && key != "" {
+		log.Printf("tls on")
+		err = srv.ListenAndServeTLS(cert, key)
+	} else {
+		err = srv.ListenAndServe()
+	}
+	if err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
+}
+
+type routeDeps struct {
+	rroot     roster.Root
+	h         *hub.Hub
+	wh        *webhook.Client
+	grok      grokbuild.Client
+	promptTok string
+	limiter   *promptLimiter
+	static    embed.FS
+}
+
+// promptLimiter caps POST /api/prompt per client address.
+type promptLimiter struct {
+	mu        sync.Mutex
+	max       int
+	hits      map[string][]time.Time
+	lastSweep time.Time
+}
+
+func newPromptLimiter(maxPerMin int) *promptLimiter {
+	return &promptLimiter{max: maxPerMin, hits: map[string][]time.Time{}, lastSweep: time.Now()}
+}
+
+func (p *promptLimiter) allow(ip string) bool {
+	if p == nil || p.max <= 0 {
+		return true
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := time.Now()
+	cut := now.Add(-time.Minute)
+	p.sweepLocked(now, cut)
+	kept := p.hits[ip][:0]
+	for _, t := range p.hits[ip] {
+		if t.After(cut) {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) >= p.max {
+		p.hits[ip] = kept
+		return false
+	}
+	p.hits[ip] = append(kept, now)
+	return true
+}
+
+// sweepLocked drops idle IPs every 5 minutes so the map cannot grow forever
+// under client-address churn. Caller holds p.mu.
+func (p *promptLimiter) sweepLocked(now time.Time, cut time.Time) {
+	if now.Sub(p.lastSweep) < 5*time.Minute {
+		return
+	}
+	p.lastSweep = now
+	for ip, ts := range p.hits {
+		live := false
+		for _, t := range ts {
+			if t.After(cut) {
+				live = true
+				break
+			}
+		}
+		if !live {
+			delete(p.hits, ip)
+		}
+	}
+}
+
+func registerRoutes(mux *http.ServeMux, d routeDeps) {
+	sub, err := fs.Sub(d.static, "static")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fileServer := http.FileServer(http.FS(sub))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && r.URL.Path != "/index.html" {
+			if !authorized(r, d.promptTok) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		if !authorized(r, d.promptTok) {
+			writeGate(w)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		b, err := d.static.ReadFile("static/index.html")
+		if err != nil {
+			http.Error(w, "missing index", 500)
+			return
+		}
+		_, _ = w.Write(b)
+	})
+
+	mux.HandleFunc("/api/session", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST only", http.StatusMethodNotAllowed)
+			return
+		}
+		if !d.limiter.allow(clientIP(r)) {
+			http.Error(w, "rate limit", http.StatusTooManyRequests)
+			return
+		}
+		if d.promptTok == "" {
+			http.Error(w, "no token configured", http.StatusUnauthorized)
+			return
+		}
+		_ = r.ParseForm()
+		got := strings.TrimSpace(r.FormValue("token"))
+		if got == "" {
+			var body struct {
+				Token string `json:"token"`
+			}
+			_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 512)).Decode(&body)
+			got = strings.TrimSpace(body.Token)
+		}
+		if subtle.ConstantTimeCompare([]byte(got), []byte(d.promptTok)) != 1 {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		sid := newSessionID()
+		putSession(sid)
+		http.SetCookie(w, &http.Cookie{
+			Name:     "village_session",
+			Value:    sid,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			Secure:   cookieSecure(r),
+			Expires:  time.Now().Add(sessionTTL),
+			MaxAge:   60 * 60 * 24 * 30,
+		})
+		if r.Header.Get("Accept") == "application/json" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})
+
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(r, d.promptTok) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		d.h.ServeWS(w, r)
+	})
+
+	mux.HandleFunc("/api/bots", func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(r, d.promptTok) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "GET only", http.StatusMethodNotAllowed)
+			return
+		}
+		// In-memory snapshot: the 5s background refresh owns the disk rescan.
+		// Serving h.Bots() keeps a 2s client poll from hammering AGENT_DATA.
+		hub.EncodeBotsJSON(w, d.h.BotsSorted())
+	})
+
+	av := avatars.Resolver{AgentsDir: d.rroot.AgentsDir()}
+	avHandler := http.StripPrefix("/avatars/", av.Handler())
+	mux.Handle("/avatars/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(r, d.promptTok) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		avHandler.ServeHTTP(w, r)
+	}))
+
+	mux.HandleFunc("/api/prompt", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST only", http.StatusMethodNotAllowed)
+			return
+		}
+		// Auth first: anonymous requests must not consume the quota of
+		// authorized users sharing the same NAT/proxy address.
+		if !authorized(r, d.promptTok) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"})
+			return
+		}
+		if !d.limiter.allow(clientIP(r)) {
+			http.Error(w, `{"error":"rate limit"}`, http.StatusTooManyRequests)
+			return
+		}
+		var body struct {
+			ID     string `json:"id"`
+			Name   string `json:"name"`
+			Prompt string `json:"prompt"`
+			Action string `json:"action"`
+			Target string `json:"target"`
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad json", 400)
+			return
+		}
+		if len(body.Prompt) > 2000 {
+			http.Error(w, `{"error":"prompt too long"}`, 400)
+			return
+		}
+		body.ID = strings.TrimSpace(body.ID)
+		body.Prompt = strings.TrimSpace(body.Prompt)
+
+		if body.Action == "skip" {
+			// skip: auth + known agent id (reject empty / unknown)
+			if body.ID == "" || roster.SanitizeID(body.ID) == "" {
+				http.Error(w, `{"error":"invalid id"}`, 400)
+				return
+			}
+			if !d.rroot.Exists(body.ID) {
+				http.Error(w, `{"error":"unknown agent"}`, 404)
+				return
+			}
+			status, detail, err := d.wh.Post(webhook.Payload{Action: "skip", ID: body.ID, Name: body.Name, Prompt: body.Prompt})
+			writePromptResult(w, status, detail, err)
+			return
+		}
+		if body.ID == "" || body.Prompt == "" {
+			http.Error(w, `{"error":"id and prompt required"}`, 400)
+			return
+		}
+		if roster.SanitizeID(body.ID) == "" {
+			http.Error(w, `{"error":"invalid id"}`, 400)
+			return
+		}
+		if !d.rroot.Exists(body.ID) {
+			http.Error(w, `{"error":"unknown agent"}`, 404)
+			return
+		}
+		d.h.PromptOptimistic(body.ID)
+		if isGrokBuildTarget(body.Target, body.Name, body.ID) {
+			text, err := d.grok.Reply(body.Prompt)
+			if err != nil {
+				d.h.PromptRollback(body.ID)
+				writePromptResult(w, 502, err.Error(), err)
+				return
+			}
+			path := d.rroot.EnsureTranscriptPath(body.ID)
+			if path == "" {
+				log.Printf("grok transcript append id=%s: no writable path", body.ID)
+			} else if err := appendGrokLine(path, text); err != nil {
+				log.Printf("grok transcript append id=%s: %v", body.ID, err)
+			}
+			writePromptResult(w, 200, truncate(text, 400), nil)
+			return
+		}
+		status, detail, err := d.wh.Post(webhook.Payload{
+			ID:     body.ID,
+			Name:   body.Name,
+			Prompt: body.Prompt,
+		})
+		if err != nil {
+			d.h.PromptRollback(body.ID)
+		}
+		writePromptResult(w, status, detail, err)
+	})
+
+	mux.HandleFunc("/api/skills", func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(r, d.promptTok) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "GET only", http.StatusMethodNotAllowed)
+			return
+		}
+		list := skills.Root{AgentData: d.rroot.AgentData}.List()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"skills": list})
+	})
+
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Non-loopback without auth: scrubbed {ok:true} only (no webhook/grokBuild/bots leak).
+		if !localRequest(r) && !authorized(r, d.promptTok) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+			return
+		}
+		allowed := roster.AllowSet()
+		allowedIDs := make([]string, 0, len(allowed))
+		for id := range allowed {
+			allowedIDs = append(allowedIDs, id)
+		}
+		sort.Strings(allowedIDs)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":         true,
+			"version":    Version,
+			"webhook":    d.wh.Configured(),
+			"grokBuild":  d.grok.Configured(),
+			"bots":       len(d.h.Bots()),
+			"allowedIds": allowedIDs, // empty ⇒ no client-side filter (all roster bots)
+		})
+	})
+}
+
+// truncate cuts at n runes (never mid-UTF-8).
+func truncate(s string, n int) string {
+	rs := []rune(s)
+	if len(rs) <= n {
+		return s
+	}
+	return string(rs[:n]) + "…"
+}
+
+func xaiPath() string {
+	if p := os.Getenv("XAI_JSON"); p != "" {
+		return p
+	}
+	return "xai.json"
+}
+
+func appendGrokLine(path, text string) error {
+	if path == "" {
+		return nil
+	}
+	// Same shape as live transcripts: role + message.content[].text.
+	// A bare top-level "content" string is classified as assistant but
+	// SnippetText returns "" so the real reply never becomes a bubble.
+	text = strings.TrimSpace(text)
+	if rs := []rune(text); len(rs) > 500 {
+		text = string(rs[:500]) + "…"
+	}
+	line, err := json.Marshal(map[string]any{
+		"role": "assistant",
+		"message": map[string]any{
+			"content": []map[string]string{
+				{"type": "text", "text": text},
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(append(line, '\n'))
+	return err
+}
+
+// grokBuildAgentID returns the optional install-specific Grok Build agent UUID
+// (VILLAGE_GROKBUILD_ID). Empty ⇒ only an explicit target routes to xAI.
+func grokBuildAgentID() string {
+	return strings.TrimSpace(os.Getenv("VILLAGE_GROKBUILD_ID"))
+}
+
+// isGrokBuildTarget reports whether /api/prompt should use the xAI grok-build path.
+// Routing is explicit only: target "grok-build" (HUD button), or the agent id
+// configured via VILLAGE_GROKBUILD_ID. Never by agent *name* — renaming an agent
+// must not silently redirect its prompts to a third party.
+func isGrokBuildTarget(target, name, id string) bool {
+	_ = name // kept for call-site clarity; name-based routing is intentionally gone
+	if strings.EqualFold(strings.TrimSpace(target), "grok-build") {
+		return true
+	}
+	gb := grokBuildAgentID()
+	return gb != "" && strings.EqualFold(strings.TrimSpace(id), gb)
+}
+
+// opaque sessions: cookie value is random; never the prompt token.
+// The file is local runtime state, deliberately separate from the webhook key.
+const sessionFile = ".village-sessions"
+
+var (
+	sessionMu  sync.Mutex
+	sessionOK  = map[string]time.Time{} // id → expiry
+	sessionTTL = 30 * 24 * time.Hour
+)
+
+func newSessionID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return hex.EncodeToString([]byte(time.Now().Format(time.RFC3339Nano)))
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// loadFromDisk restores opaque sessions after a process restart. Expired entries
+// are dropped and the pruned object is written back.
+func loadFromDisk() error {
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+
+	b, err := os.ReadFile(sessionFile)
+	if os.IsNotExist(err) {
+		sessionOK = map[string]time.Time{}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var stored map[string]int64
+	if err := json.Unmarshal(b, &stored); err != nil {
+		return err
+	}
+
+	now := time.Now()
+	loaded := make(map[string]time.Time, len(stored))
+	for id, unix := range stored {
+		if id == "" || unix <= now.Unix() {
+			continue
+		}
+		loaded[id] = time.Unix(unix, 0)
+	}
+	pruned := len(loaded) != len(stored)
+	sessionOK = loaded
+	if pruned {
+		return saveSessionsLocked()
+	}
+	return nil
+}
+
+func putSession(id string) {
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+	now := time.Now()
+	for existing, exp := range sessionOK {
+		if !exp.After(now) {
+			delete(sessionOK, existing)
+		}
+	}
+	sessionOK[id] = now.Add(sessionTTL)
+	if err := saveSessionsLocked(); err != nil {
+		log.Printf("sessions: save: %v", err)
+	}
+}
+
+func saveSessionsLocked() error {
+	stored := make(map[string]int64, len(sessionOK))
+	for id, exp := range sessionOK {
+		if id != "" {
+			stored[id] = exp.Unix()
+		}
+	}
+	b, err := json.Marshal(stored)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(".", sessionFile+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(append(b, '\n')); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, sessionFile)
+}
+
+func validSession(id string) bool {
+	if id == "" {
+		return false
+	}
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+	exp, ok := sessionOK[id]
+	if !ok {
+		return false
+	}
+	if !time.Now().Before(exp) {
+		delete(sessionOK, id)
+		if err := saveSessionsLocked(); err != nil {
+			log.Printf("sessions: save after expiry: %v", err)
+		}
+		return false
+	}
+	return true
+}
+
+func cookieSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+// resolvePromptToken reads VILLAGE_PROMPT_TOKEN, else optional .prompt-token file.
+// The webhook key stays on disk and is never copied into the page.
+func resolvePromptToken() string {
+	if t := strings.TrimSpace(os.Getenv("VILLAGE_PROMPT_TOKEN")); t != "" {
+		return t
+	}
+	b, err := os.ReadFile(".prompt-token")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func checkPromptAuth(r *http.Request, token string) bool {
+	if token == "" {
+		return false
+	}
+	if h := strings.TrimSpace(r.Header.Get("X-Village-Token")); h != "" && subtle.ConstantTimeCompare([]byte(h), []byte(token)) == 1 {
+		return true
+	}
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(auth, "Bearer ") {
+		got := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+		if subtle.ConstantTimeCompare([]byte(got), []byte(token)) == 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// authorized allows loopback, or any peer when VILLAGE_LOCAL=1 (dev/trust LAN/Tailscale).
+// Otherwise non-loopback clients need the prompt token (header) or a valid opaque village_session cookie.
+func authorized(r *http.Request, token string) bool {
+	if localRequest(r) {
+		return true
+	}
+	// RISK: VILLAGE_LOCAL=1 skips the token gate for every peer (0.0.0.0 exposes the LAN); unset it so webhook/prompt still require the token.
+	if os.Getenv("VILLAGE_LOCAL") == "1" {
+		return true
+	}
+	if token == "" {
+		return false
+	}
+	if checkPromptAuth(r, token) {
+		return true
+	}
+	c, err := r.Cookie("village_session")
+	if err != nil {
+		return false
+	}
+	return validSession(c.Value)
+}
+
+// localRequest is true only for loopback peers.
+// VILLAGE_LOCAL=1 opens remotes via authorized() (not here).
+func localRequest(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func writeGate(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Botvillage</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#14120f;color:#f3efe6;font:16px/1.4 Georgia,serif}form{width:min(420px,92vw)}input,button{width:100%;box-sizing:border-box;margin-top:10px;padding:12px;border-radius:10px;border:1px solid #3a342c;background:#1c1916;color:inherit}button{background:#e07a3d;color:#1a120c;border:0;font-weight:600}</style><form method="post" action="/api/session"><h1>Bureau des agents</h1><p>Cette install n’est pas sur la machine. Jeton local, pas la clé webhook.</p><input name="token" type="password" autocomplete="off" required placeholder="VILLAGE_PROMPT_TOKEN"><button type="submit">Entrer</button></form>`))
+}
+
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func writePromptResult(w http.ResponseWriter, status int, detail string, err error) {
+	w.Header().Set("Content-Type", "application/json")
+	ok := err == nil
+	code := 200
+	if !ok {
+		if status == 503 {
+			code = 503
+		} else {
+			code = 502
+		}
+	}
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":     ok,
+		"status": status,
+		"detail": detail,
+	})
+}
+
+func envOr(k, def string) string {
+	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+		return v
+	}
+	return def
+}
+
+func withLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		if r.URL.Path != "/ws" {
+			log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
+		}
+	})
+}
