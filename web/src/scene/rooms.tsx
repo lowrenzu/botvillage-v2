@@ -1,71 +1,86 @@
 import {useEffect,useMemo} from 'react'
 import {RoundedBox} from '@react-three/drei'
 import * as THREE from 'three'
-import {skillBooks,byVotes,ui,go,CLICK_MOVE_MAX,type Room,type SkillJSON} from '../sim'
-import { Box, AL, GR, WH, WN, Plant, Workstation, Laptop, Credenza, Chair, Pane, Doorway, scr, KIND, labScr, Metal, cvs, keysTex } from './primitives'
+import {skillBooks,byVotes,ui,go,setSkillsOpen,setCompetencesOpen,CLICK_MOVE_MAX,type Room,type SkillJSON} from '../sim'
+import { Box, AL, GR, WN, Plant, Workstation, Laptop, Credenza, Chair, Pane, Doorway, scr, KIND, labScr, Metal, cvs, keysTex } from './primitives'
 import { roomWood } from './textures'
 
 type V3=[number,number,number]
 
-const BOOK_COLORS=['#e8dcc8','#d4c4a8','#c9b896','#b8a88a','#a89878','#d8c8b0','#c4b49a','#e0d4bc','#b0a080','#cfc0a4','#dccfb8','#a89070']
 function shortSkillLabel(s:SkillJSON){
   const n=(s.name||s.id||'').trim().replace(/[-_]/g,' ')
   if(n.length<=16)return n
   return n.slice(0,14)+'…'
 }
-function bookSpineTex(label:string,color:string){
-  return cvs(96,320,x=>{
-    const g=x.createLinearGradient(0,0,96,0)
-    g.addColorStop(0,'rgba(80,60,40,.18)');g.addColorStop(.1,color);g.addColorStop(.9,color);g.addColorStop(1,'rgba(255,255,255,.22)')
-    x.fillStyle=g;x.fillRect(0,0,96,320)
-    x.fillStyle='rgba(255,255,255,.28)';x.fillRect(8,0,2,320)
-    x.fillStyle='rgba(90,70,50,.22)';x.fillRect(0,10,96,3);x.fillRect(0,306,96,3)
-    x.fillStyle='rgba(255,255,255,.35)';x.fillRect(0,16,96,1.5)
-    x.save();x.translate(50,160);x.rotate(-Math.PI/2)
-    x.font='600 20px "Plus Jakarta Sans", system-ui, sans-serif'
-    x.textAlign='center';x.textBaseline='middle'
-    x.fillStyle='rgba(255,255,255,.45)';x.fillText(label,1,1)
-    x.fillStyle='rgba(42,34,28,.82)';x.fillText(label,0,0)
-    x.restore()
-  })
+function wideSkillLabel(s: SkillJSON) {
+  const n = (s.name || s.id || '').trim().replace(/[-_]/g, ' ')
+  if (n.length <= 34) return n
+  return n.slice(0, 32) + '…'
 }
-
-
-function skillListTex(title: string, skills: SkillJSON[]) {
-  return cvs(512, 640, x => {
+function skillListTex(title: string, skills: SkillJSON[], wide = false, accent = '#58b3ab') {
+  const W = wide ? 1536 : 512
+  const H = wide ? 440 : 640
+  return cvs(W, H, x => {
     x.fillStyle = '#3a424c'
-    x.fillRect(0, 0, 512, 640)
-    x.fillStyle = '#c46a32'
-    x.fillRect(0, 0, 512, 6)
+    x.fillRect(0, 0, W, H)
+    x.fillStyle = wide ? accent : '#c46a32'
+    x.fillRect(0, 0, W, wide ? 10 : 6)
     x.fillStyle = '#f3efe6'
-    x.font = '500 28px sans-serif'
-    x.fillText(title, 28, 48)
+    x.font = wide ? '500 42px sans-serif' : '500 28px sans-serif'
+    x.fillText(title, wide ? 40 : 28, wide ? 62 : 48)
     x.fillStyle = '#9a9186'
-    x.font = '18px sans-serif'
-    x.fillText(skills.length ? skills.length + ' au dossier' : 'dossier vide', 28, 78)
-    const list = skills.slice(0, 18)
-    list.forEach((s, i) => {
-      x.fillStyle = i % 2 ? '#4a5560' : '#424a54'
-      x.fillRect(20, 100 + i * 28, 472, 26)
-      x.fillStyle = '#f3efe6'
-      x.font = '20px sans-serif'
-      x.fillText(shortSkillLabel(s), 32, 118 + i * 28)
-    })
-    if (!list.length) {
+    x.font = wide ? '22px sans-serif' : '18px sans-serif'
+    x.fillText(skills.length ? skills.length + ' au dossier' : 'dossier vide', wide ? 40 : 28, wide ? 98 : 78)
+    if (!skills.length) {
       x.fillStyle = '#9a9186'
-      x.fillText('Aucun skill', 32, 130)
+      x.fillText('Aucun skill', wide ? 40 : 32, wide ? 170 : 130)
+      return
+    }
+    if (!wide) {
+      skills.slice(0, 18).forEach((s, i) => {
+        x.fillStyle = i % 2 ? '#4a5560' : '#424a54'
+        x.fillRect(20, 100 + i * 28, 472, 26)
+        x.fillStyle = '#f3efe6'
+        x.font = '20px sans-serif'
+        x.fillText(shortSkillLabel(s), 32, 118 + i * 28)
+      })
+      return
+    }
+    const per = 8
+    const colW = (W - 72) / 2
+    for (let c = 0; c < 2; c++) {
+      skills.slice(c * per, (c + 1) * per).forEach((s, i) => {
+        const x0 = 36 + c * colW
+        x.fillStyle = i % 2 ? '#4a5560' : '#424a54'
+        x.fillRect(x0, 122 + i * 36, colW - 20, 30)
+        x.fillStyle = '#f3efe6'
+        x.font = '22px sans-serif'
+        x.fillText(wideSkillLabel(s), x0 + 14, 144 + i * 36)
+      })
     }
   })
 }
-function SkillBoard({title, skills, p, r = 0}:{title:string; skills:SkillJSON[]; p:V3; r?:number}) {
+function SkillBoard({title, skills, p, r = 0, catalog, wide = false, accent = '#58b3ab'}:{title:string; skills:SkillJSON[]; p:V3; r?:number; catalog?:'skills'|'competences'; wide?:boolean; accent?:string}) {
   const key = skills.map(s => s.id + ':' + s.name).join('|')
-  const map = useMemo(() => skillListTex(title, skills), [key, title]) // eslint-disable-line react-hooks/exhaustive-deps
+  const map = useMemo(() => skillListTex(title, skills, wide, accent), [key, title, wide, accent]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => map.dispose(), [map])
-  return <group position={p} rotation={[0, r, 0]}>
-    <RoundedBox args={[2.4, 3.0, .06]} radius={.02} position={[0, 1.7, 0]} castShadow>
+  const W = wide ? 7.4 : 2.4
+  const H = wide ? 2.28 : 3.0
+  const y = wide ? 1.22 : 1.7
+  const open = () => {
+    if (ui.moved >= CLICK_MOVE_MAX) return
+    if (catalog === 'skills') setSkillsOpen(true)
+    if (catalog === 'competences') setCompetencesOpen(true)
+  }
+  return <group position={p} rotation={[0, r, 0]}
+    onPointerOver={catalog ? e => { e.stopPropagation(); document.body.style.cursor = 'pointer' } : undefined}
+    onPointerOut={catalog ? () => { document.body.style.cursor = '' } : undefined}
+    onClick={catalog ? e => { e.stopPropagation(); open() } : undefined}>
+    <RoundedBox args={[W, H, .07]} radius={.02} position={[0, y, 0]} castShadow>
       <meshStandardMaterial color="#4a5560" roughness={.6}/>
     </RoundedBox>
-    <mesh position={[0, 1.7, .04]}><planeGeometry args={[2.2, 2.75]}/><meshBasicMaterial map={map} toneMapped={false}/></mesh>
+    <mesh position={[0, y, .05]}><planeGeometry args={[W - .22, H - .22]}/><meshBasicMaterial map={map} toneMapped={false}/></mesh>
+    <mesh position={[0, y, -.05]} rotation={[0, Math.PI, 0]}><planeGeometry args={[W - .22, H - .22]}/><meshBasicMaterial map={map} toneMapped={false}/></mesh>
   </group>
 }
 function DeskExtras() {
@@ -76,63 +91,6 @@ function DeskExtras() {
     <mesh position={[-.15, .91, .42]} rotation={[-Math.PI/2, 0, .2]}><planeGeometry args={[.34, .24]}/><meshStandardMaterial color="#f4efe6" roughness={.8}/></mesh>
   </group>
 }
-/** Tall bookshelf unit with labelled spines (library). */
-function Bookshelf({p,r=0,books,thin=false}:{p:V3;r?:number;books:SkillJSON[];thin?:boolean}){
-  const W=thin?2.5:3.4, H=3.35, D=.58
-  const shelves=5
-  const bookKey=books.map(b=>b.id+':'+b.name).join('|')
-  const maps=useMemo(()=>books.map((b,i)=>bookSpineTex(shortSkillLabel(b),BOOK_COLORS[i%BOOK_COLORS.length])),[bookKey]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(()=>()=>{maps.forEach(m=>m.dispose())},[maps])
-  return <group position={p} rotation={[0,r,0]}>
-    <RoundedBox args={[W,H,D]} radius={.025} position={[0,H/2,0]} castShadow receiveShadow>
-      <meshStandardMaterial color={WN} roughness={.52}/>
-    </RoundedBox>
-    <Box p={[0,H/2,-D/2+.02]} a={[W-.08,H-.1,.04]} c="#4a3a2e" ro={.9} m={0}/>
-    <Box p={[0,H-.04,0]} a={[W+.08,.08,D+.06]} c="#7a6554" ro={.4}/>
-    <Box p={[0,.06,0]} a={[W+.06,.12,D+.04]} c="#5a4638" ro={.5}/>
-    {/* aluminum stile + glass cabinet panes — Atelier/Pane language */}
-    <Box p={[-W/2+.04,H/2,D/2-.02]} a={[.05,H-.08,.06]} c={AL} m={.2} ro={.28}/>
-    <Box p={[W/2-.04,H/2,D/2-.02]} a={[.05,H-.08,.06]} c={AL} m={.2} ro={.28}/>
-    <Box p={[0,H/2,D/2-.02]} a={[.04,H-.12,.05]} c={AL} m={.2} ro={.28}/>
-    <mesh position={[-W/4,H/2,D/2+.01]}>
-      <boxGeometry args={[W/2-.14,H-.28,.018]}/>
-      <meshStandardMaterial color="#dbe6ef" transparent opacity={.15} roughness={.05} metalness={.12} depthWrite={false}/>
-    </mesh>
-    <mesh position={[W/4,H/2,D/2+.01]}>
-      <boxGeometry args={[W/2-.14,H-.28,.018]}/>
-      <meshStandardMaterial color="#dbe6ef" transparent opacity={.15} roughness={.05} metalness={.12} depthWrite={false}/>
-    </mesh>
-    <Box p={[-W/4,H-.22,D/2+.02]} a={[W/2-.12,.04,.03]} c={AL} m={.2} ro={.3}/>
-    <Box p={[W/4,H-.22,D/2+.02]} a={[W/2-.12,.04,.03]} c={AL} m={.2} ro={.3}/>
-    <Box p={[-W/4,.22,D/2+.02]} a={[W/2-.12,.04,.03]} c={AL} m={.2} ro={.3}/>
-    <Box p={[W/4,.22,D/2+.02]} a={[W/2-.12,.04,.03]} c={AL} m={.2} ro={.3}/>
-    {Array.from({length:shelves},(_,row)=>{
-      const y=.32+row*((H-.5)/(shelves))
-      const per=Math.max(1,Math.ceil(books.length/shelves))
-      const rowBooks=books.slice(row*per,(row+1)*per)
-      let x=-W/2+.2
-      return <group key={row}>
-        <Box p={[0,y-0.05,0]} a={[W-.1,.055,D-.05]} c="#7a6554" ro={.4}/>
-        <Box p={[0,y+.01,D/2-.06]} a={[W-.12,.03,.04]} c="#8a7060" ro={.45}/>
-        {rowBooks.map((b,i)=>{
-          const gi=row*per+i
-          const isPlay=b.id.startsWith('site-playbooks')||b.source==='plugin'
-          const bw=isPlay?.08:.135
-          const bh=.48+((i*17+row*9)%5)*.045
-          const bm=maps[gi]||maps[i%Math.max(maps.length,1)]
-          const xpos=x+bw/2
-          x+=bw+.03
-          if(xpos>W/2-.14)return null
-          return <mesh key={b.id+'-'+gi} position={[xpos,y+bh/2,.04]} castShadow>
-            <boxGeometry args={[bw,bh,D-.2]}/>
-            <meshStandardMaterial map={bm} roughness={.65}/>
-          </mesh>
-        })}
-      </group>
-    })}
-  </group>
-}
-
 function ReadingLamp({p}:{p:V3}){
   return <group position={p}>
     <mesh position={[0,.02,0]}><cylinderGeometry args={[.12,.14,.04,12]}/><Metal c="#9aa3ad"/></mesh>
@@ -146,110 +104,33 @@ function ReadingLamp({p}:{p:V3}){
 function LibraryRoom({r}:{r:Room}){
   const b=r.s
   const books=byVotes('skills', skillBooks)
-  const empty=books.length===0
-  const per=Math.max(1,Math.ceil((empty?1:books.length)/5))
-  const chunks:SkillJSON[][]=empty
-    ? [[{id:'_',name:'Aucun skill',source:'user'}],[],[],[],[]]
-    : [0,1,2,3,4].map(i=>books.slice(i*per,(i+1)*per))
+  /* Door is local −z. Keep the table on that side so the floor word (z ±1.2) stays open. */
+  const tz=b*-2.7
   return <>
-    {/* floor owned by RoomView (single wood plane) — furniture only here */}
-    {/* side walls — full bays clear of door centerline */}
-    <Bookshelf p={[-3.45,0,b*1.6]} r={Math.PI/2} books={chunks[0]||[]}/>
-    <Bookshelf p={[3.45,0,b*1.6]} r={-Math.PI/2} books={chunks[1]||[]}/>
-    {/* door-wall flanks (leave ±2 clear for Doorway path) */}
-    <Bookshelf p={[-2.7,0,-b*3.45]} r={0} books={chunks[2]||[]} thin/>
-    <Bookshelf p={[2.7,0,-b*3.45]} r={0} books={chunks[3]||[]} thin/>
-    {/* back-wall bay + low credenza (door centerline stays clear for go()) */}
-    <Bookshelf p={[-2.55,0,b*3.55]} r={Math.PI} books={chunks[4]||[]} thin/>
-    <SkillBoard title="Skills" skills={books} p={[0,0,b*3.15]} r={b>0?Math.PI:0}/>
-    <group position={[2.2,0,b*4.2]}>
-      <RoundedBox args={[2.2,1.0,.48]} radius={.025} position={[0,.5,0]} castShadow receiveShadow>
-        <meshStandardMaterial color={WN} roughness={.48}/>
-      </RoundedBox>
-      <Box p={[0,1.02,0]} a={[2.28,.05,.52]} c="#7a6554" ro={.4}/>
-      <Box p={[-1.05,.5,.22]} a={[.05,.9,.07]} c={AL} m={.2} ro={.3}/>
-      <Box p={[1.05,.5,.22]} a={[.05,.9,.07]} c={AL} m={.2} ro={.3}/>
-      <Box p={[0,.5,-.18]} a={[2.0,.85,.04]} c="#4a3a2e" ro={.9} m={0}/>
-      <Box p={[0,.46,0]} a={[2.0,.04,.4]} c="#7a6554" ro={.4}/>
-      {(chunks[4]||[]).slice(0,8).map((bk,i)=>{
-        const bw=.11, xpos=-.85+i*(bw+.035)
-        return <mesh key={'cred-'+bk.id+i} position={[xpos,.7,.05]} castShadow>
-          <boxGeometry args={[bw,.36+(i%3)*.05,.24]}/>
-          <meshStandardMaterial color={BOOK_COLORS[(i+3)%BOOK_COLORS.length]} roughness={.65}/>
-        </mesh>
-      })}
-    </group>
-    {/* reading rug above single floor plane (no z-fight with roomWood) */}
-    <mesh rotation={[-Math.PI/2,0,0]} position={[0,.048,b*.2]} receiveShadow>
-      <planeGeometry args={[3.5,2.5]}/>
+    {/* Face +z: the overview camera sits on that side, so the list is readable from the hall view. */}
+    <SkillBoard title="Skills" catalog="skills" wide skills={books} p={[0,0,b*3.9]} r={b>0?0:Math.PI}/>
+    <mesh rotation={[-Math.PI/2,0,0]} position={[0,.048,tz]} receiveShadow>
+      <planeGeometry args={[2.6,1.5]}/>
       <meshStandardMaterial color="#7a6554" roughness={.92} metalness={0}/>
     </mesh>
-    <mesh rotation={[-Math.PI/2,0,0]} position={[0,.051,b*.2]}>
-      <planeGeometry args={[3.1,2.1]}/>
-      <meshStandardMaterial color="#8a7360" roughness={.9} metalness={0}/>
-    </mesh>
-    {/* reading table — Atelier desk recipe: WN top, GR legs */}
-    <RoundedBox args={[2.85,.08,1.3]} radius={.03} position={[0,.86,b*.2]} castShadow>
+    <RoundedBox args={[2.2,.08,1.05]} radius={.03} position={[0,.86,tz]} castShadow>
       <meshStandardMaterial color={WN} roughness={.3} metalness={.05}/>
     </RoundedBox>
-    <Box p={[-1.2,.43,b*.2-.48]} a={[.08,.86,.08]} c={GR} m={.75} ro={.3}/>
-    <Box p={[1.2,.43,b*.2-.48]} a={[.08,.86,.08]} c={GR} m={.75} ro={.3}/>
-    <Box p={[-1.2,.43,b*.2+.48]} a={[.08,.86,.08]} c={GR} m={.75} ro={.3}/>
-    <Box p={[1.2,.43,b*.2+.48]} a={[.08,.86,.08]} c={GR} m={.75} ro={.3}/>
-    <Box p={[0,.82,b*.2]} a={[2.7,.03,1.15]} c="#5a4638" ro={.55} m={0}/>
-    <mesh position={[-.45,.91,b*.2+.1]} rotation={[-.05,.28,0]}>
-      <boxGeometry args={[.58,.03,.42]}/>
-      <meshStandardMaterial color="#c9b896" roughness={.55}/>
-    </mesh>
-    <mesh position={[.35,.91,b*.2-.1]} rotation={[-.08,-.2,0]}>
-      <boxGeometry args={[.5,.025,.38]}/>
-      <meshStandardMaterial color="#d4c4a8" roughness={.5}/>
-    </mesh>
-    <Box p={[.85,.905,b*.2+.3]} a={[.3,.02,.24]} c={WH} ro={.7} m={0}/>
-    <Box p={[.88,.92,b*.2+.27]} a={[.28,.015,.22]} c="#ebe6dc" ro={.7} m={0}/>
-    <mesh position={[-.9,.93,b*.2-.25]}>
-      <cylinderGeometry args={[.07,.06,.1,12]}/>
-      <meshStandardMaterial color="#f5f4f1" roughness={.25}/>
-    </mesh>
-    <ReadingLamp p={[-1.05,.9,b*.2+.45]}/>
-    <ReadingLamp p={[1.05,.9,b*.2-.45]}/>
-    {/* lectern — side bay, not in path */}
-    <group position={[-3.25,0,-b*.9]}>
-      <RoundedBox args={[.95,1.15,.5]} radius={.02} position={[0,.575,0]} castShadow>
-        <meshStandardMaterial color={WN} roughness={.48}/>
-      </RoundedBox>
-      <Box p={[-.42,.55,.22]} a={[.05,1.05,.06]} c={AL} m={.2} ro={.3}/>
-      <Box p={[.42,.55,.22]} a={[.05,1.05,.06]} c={AL} m={.2} ro={.3}/>
-      <mesh position={[0,1.22,.05]} rotation={[-.4,0,0]}>
-        <boxGeometry args={[.82,.04,.45]}/>
-        <meshStandardMaterial color="#7a6554" roughness={.4}/>
-      </mesh>
-      <mesh position={[0,1.28,.08]} rotation={[-.4,0,0]}>
-        <planeGeometry args={[.68,.34]}/>
-        <meshStandardMaterial color="#e8e0d4" roughness={.7}/>
-      </mesh>
-    </group>
-    {/* rolling ladder against side bay */}
-    <group position={[3.2,0,-b*2.0]}>
-      <Box p={[0,1.6,0]} a={[.06,3.1,.06]} c={AL} m={.35} ro={.25}/>
-      <Box p={[.42,1.6,0]} a={[.06,3.1,.06]} c={AL} m={.35} ro={.25}/>
-      {[0,1,2,3,4,5].map(i=>(
-        <Box key={i} p={[.21,.35+i*.5,0]} a={[.42,.04,.05]} c={WN} ro={.45} m={0}/>
-      ))}
-    </group>
-    <Chair p={[-1.0,0,b*.2+1.15]} r={Math.PI}/>
-    <Chair p={[1.0,0,b*.2-1.15]} r={0}/>
-    <Plant p={[-4.2,0,b*4.15]}/>
-    <Plant p={[4.2,0,-b*3.9]}/>
-    <Plant p={[-4.15,0,-b*1.5]}/>
-    <pointLight color="#fff1dc" intensity={2.45} distance={9.5} position={[0,3.7,0]} castShadow={false}/>
-    <pointLight color="#ffe8c8" intensity={.85} distance={5} position={[0,2.2,b*.2]} castShadow={false}/>
+    <Box p={[-0.95,.43,tz-.4]} a={[.08,.86,.08]} c={GR} m={.75} ro={.3}/>
+    <Box p={[0.95,.43,tz-.4]} a={[.08,.86,.08]} c={GR} m={.75} ro={.3}/>
+    <Box p={[-0.95,.43,tz+.4]} a={[.08,.86,.08]} c={GR} m={.75} ro={.3}/>
+    <Box p={[0.95,.43,tz+.4]} a={[.08,.86,.08]} c={GR} m={.75} ro={.3}/>
+    <ReadingLamp p={[0.7,.9,tz]}/>
+    <Chair p={[-1.2,0,tz+0.85]} r={b>0?Math.PI:0}/>
+    <Chair p={[1.2,0,tz-0.85]} r={b>0?0:Math.PI}/>
+    <Plant p={[-3.9,0,b*-3.3]}/>
+    <Plant p={[3.9,0,b*-3.3]}/>
+    <pointLight color="#fff6ea" intensity={1.5} distance={9} position={[0,3.2,b*1.4]} castShadow={false}/>
   </>
 }
 
 function ServerUnit({y,w=1.9}:{y:number;w?:number}){
-  /* sober status LEDs — cool white + soft green only (no rainbow) */
-  const leds=[[-w*.42,'#6ee7a0'],[-w*.32,'#6ee7a0'],[-w*.22,'#94a3b8'],[-w*.08,'#64748b'],[w*.28,'#c8d4e0'],[w*.4,'#c8d4e0']] as [number,string][]
+  /* Une colonne or, fixe, lisible depuis la vue d'ensemble. */
   return <group position={[0,y,0]}>
     <RoundedBox args={[w,.34,.72]} radius={.01} castShadow>
       <meshStandardMaterial color="#46515c" emissive="#46515c" emissiveIntensity={0.28} metalness={.45} roughness={.38}/>
@@ -261,10 +142,10 @@ function ServerUnit({y,w=1.9}:{y:number;w?:number}){
         <meshStandardMaterial color="#4a5560" emissive="#4a5560" emissiveIntensity={0.2} metalness={.28} roughness={.48}/>
       </mesh>
     ))}
-    {leds.map(([x,c],i)=>(
-      <mesh key={i} position={[x,.04,.375]}>
-        <boxGeometry args={[.05,.05,.03]}/>
-        <meshStandardMaterial color={c} emissive={c} emissiveIntensity={1.1} roughness={.25}/>
+    {[-.08,0,.08].map((dy,i)=>(
+      <mesh key={i} position={[w*.4,dy,.4]}>
+        <sphereGeometry args={[.038,10,8]}/>
+        <meshStandardMaterial color="#c9a84a" emissive="#c9a84a" emissiveIntensity={.7} roughness={.35}/>
       </mesh>
     ))}
   </group>
@@ -289,7 +170,7 @@ function ServerRack({p,r=0,units=9}:{p:V3;r?:number;units?:number}){
     ))}
     <mesh position={[0,H-.2,D/2+.035]}>
       <boxGeometry args={[.55,.06,.025]}/>
-      <meshStandardMaterial color="#6ee7a0" emissive="#6ee7a0" emissiveIntensity={.55} roughness={.4}/>
+      <meshStandardMaterial color="#c9a84a" emissive="#c9a84a" emissiveIntensity={.45} roughness={.4}/>
     </mesh>
     <mesh position={[-.45,H-.2,D/2+.035]}>
       <boxGeometry args={[.08,.06,.025]}/>
@@ -363,50 +244,25 @@ function StatusPanel({p,r=0}:{p:V3;r?:number}){
 
 function LabRoom({r}:{r:Room}){
   const b=r.s
+  /* Same plan as Skills: wide screen on the camera wall, floor word clear, desk toward the door. */
+  const tz=b*-2.7
   return <>
-    {/* shared room parquet; keep the lab racks and console hi-tech */}
     <mesh rotation={[-Math.PI/2,0,0]} position={[0,.028,0]} receiveShadow>
       <planeGeometry args={[8.4,8.4]}/>
-      <meshStandardMaterial map={roomWood} color="#d8cfc3" roughness={.58} metalness={0}/>
+      <meshStandardMaterial map={roomWood} color="#3c434c" roughness={.72} metalness={.04}/>
     </mesh>
-    {/* aluminum perimeter strip — ties to Pane posts */}
     <Box p={[0,.04,4.15]} a={[8.4,.035,.1]} c={AL} m={.2} ro={.3}/>
     <Box p={[0,.04,-4.15]} a={[8.4,.035,.1]} c={AL} m={.2} ro={.3}/>
     <Box p={[-4.15,.04,0]} a={[.1,.035,8.4]} c={AL} m={.2} ro={.3}/>
     <Box p={[4.15,.04,0]} a={[.1,.035,8.4]} c={AL} m={.2} ro={.3}/>
-    {/* door-wall flanks only — leave ±1.5 clear for go() centerline (matches library) */}
-    <ServerRack p={[-2.85,0,-b*3.4]} r={b>0?0:Math.PI} units={9}/>
-    <ServerRack p={[2.85,0,-b*3.4]} r={b>0?0:Math.PI} units={9}/>
-    <ServerRack p={[-3.55,0,b*.2]} r={Math.PI/2} units={7}/>
-    <ServerRack p={[3.55,0,b*.2]} r={-Math.PI/2} units={7}/>
-    {/* former center door rack — back bay, clear of door aisle + console */}
-    <ServerRack p={[2.4,0,b*3.55]} r={b>0?Math.PI:0} units={8}/>
-    <CableTray p={[0,0,-b*3.4]} len={7.4} ax="x"/>
-    <CableTray p={[-3.55,0,0]} len={5.6} ax="z"/>
-    <CableTray p={[3.55,0,0]} len={5.6} ax="z"/>
-    <ConsoleDesk p={[0,0,b*2.15]} r={b>0?Math.PI:0}/>
-    <Chair p={[0,0,b*3.05]} r={b>0?0:Math.PI}/>
-    <SkillBoard title="Compétences" skills={byVotes('skills', skillBooks)} p={[0,0,b*4.35]} r={b>0?Math.PI:0}/>
-    <group position={[-3.45,0,b*3.5]}>
-      <RoundedBox args={[1.2,1.5,.65]} radius={.015} position={[0,.75,0]} castShadow>
-        <meshStandardMaterial color="#3e4650" emissive="#3e4650" emissiveIntensity={0.26} metalness={.42} roughness={.36}/>
-      </RoundedBox>
-      {[0,1,2,3].map(i=>(
-        <mesh key={i} position={[0,.38+i*.28,.34]}>
-          <boxGeometry args={[1.0,.09,.02]}/>
-          <meshStandardMaterial color="#4a5560" emissive="#4a5560" emissiveIntensity={0.2} metalness={.32} roughness={.42}/>
-        </mesh>
-      ))}
-      <mesh position={[.28,1.35,.34]}>
-        <boxGeometry args={[.05,.05,.025]}/>
-        <meshStandardMaterial color="#6ee7a0" emissive="#6ee7a0" emissiveIntensity={.7}/>
-      </mesh>
-    </group>
-    <Plant p={[3.85,0,b*3.95]}/>
-    {/* cool rack glow + warm door spill (corridor continuity) */}
-    <pointLight color="#d8e4f0" intensity={2.5} distance={10} position={[0,4.0,0]} castShadow={false}/>
-    <pointLight color="#9eb6c8" intensity={1.1} distance={6.5} position={[-2,2.3,-2]} castShadow={false}/>
-    <pointLight color="#fff1dc" intensity={1.0} distance={5.5} position={[0,2.4,-b*4.2]} castShadow={false}/>
+    <SkillBoard title="Compétences" catalog="competences" wide accent="#c9a84a" skills={byVotes('skills', skillBooks)} p={[0,0,b*3.9]} r={b>0?0:Math.PI}/>
+    <ServerRack p={[-4.15,0,b*2.6]} r={Math.PI/2} units={6}/>
+    <ServerRack p={[4.15,0,b*2.6]} r={-Math.PI/2} units={6}/>
+    <ConsoleDesk p={[0,0,tz]} r={b>0?0:Math.PI}/>
+    <Chair p={[0,0,tz+1.15]} r={b>0?Math.PI:0}/>
+    <Plant p={[-3.9,0,b*-4.15]}/>
+    <Plant p={[3.9,0,b*-4.15]}/>
+    <pointLight color="#d5dee8" intensity={1.4} distance={9} position={[0,3.2,b*1.4]} castShadow={false}/>
   </>
 }
 
@@ -422,6 +278,10 @@ function RoomView({r}:{r:Room}){
   {!isLab&&<mesh rotation={[-Math.PI/2,0,0]} position={[0,.022,0]} receiveShadow>
     <planeGeometry args={[8.4,8.4]}/>
     <meshStandardMaterial map={roomWood} color="#d8cfc3" roughness={.58} metalness={0}/>
+  </mesh>}
+  {!isLab&&<mesh rotation={[-Math.PI/2,0,0]} position={[0,.036,0]}>
+    <planeGeometry args={[7.5,7.5]}/>
+    <meshBasicMaterial color={r.c} transparent opacity={.28} depthWrite={false}/>
   </mesh>}
   <Pane p={[0,0,b*5]} len={10} ax="x"/><Pane p={[-5,0,0]} len={10} ax="z"/><Pane p={[5,0,0]} len={10} ax="z"/>
   <Pane p={[-3.5,0,-b*5]} len={3} ax="x"/><Pane p={[3.5,0,-b*5]} len={3} ax="x"/>
@@ -443,4 +303,4 @@ function RoomView({r}:{r:Room}){
   {r.t==='lab'&&<LabRoom r={r}/>}
  </group>}
 
-export { RoomView, LibraryRoom, LabRoom, shortSkillLabel, bookSpineTex, SkillBoard, DeskExtras, Bookshelf, ReadingLamp, ServerUnit, ServerRack, CableTray, ConsoleDesk, StatusPanel }
+export { RoomView, LibraryRoom, LabRoom, shortSkillLabel, SkillBoard, DeskExtras, ReadingLamp, ServerUnit, ServerRack, CableTray, ConsoleDesk, StatusPanel }

@@ -46,7 +46,17 @@ export interface BotJSON {
   hasAvatar?: boolean; lastRole?: string; state?: string
   homeX?: number; homeY?: number; x?: number; y?: number
   hasTranscript?: boolean
+  /** « Verbe · cible » from a real tool line, or absent. */
+  bubble?: string
 }
+
+/** Real action bubble only. Chat sentences and status words do not match. */
+export function actionLine(text: string | undefined | null): string {
+  const raw = (text || '').trim()
+  if (/^(Lit|Modifie|Consulte|Recherche) · \S/.test(raw)) return raw
+  return ''
+}
+
 
 const NAMED: Record<string, string> = {
   yellow: '#c9a84a', magenta: '#b87a9e', orange: '#c48a5a', blue: '#5e9bd6',
@@ -114,6 +124,23 @@ export const ui = {
   /** Real prompt-ack toast (WS activity after sent) — never a timer fake. */
   toast: '' as string,
   toastUntil: 0,
+  /** Room screens: catalog sheets. Names only, no SKILL.md bodies. */
+  skillsOpen: false,
+  competencesOpen: false,
+}
+
+export function setSkillsOpen(open: boolean) {
+  if (ui.skillsOpen === open) return
+  ui.skillsOpen = open
+  if (open) ui.competencesOpen = false
+  emit()
+}
+
+export function setCompetencesOpen(open: boolean) {
+  if (ui.competencesOpen === open) return
+  ui.competencesOpen = open
+  if (open) ui.skillsOpen = false
+  emit()
 }
 
 export interface SkillJSON { id: string; name: string; source: string }
@@ -136,7 +163,8 @@ const hm = () => new Date().toTimeString().slice(0, 8)
 
 function classify(tx: string): EvKind {
   const t = tx.toLowerCase()
-  /* Frieze must not invent walk/talk/work from keywords in a line. */
+  /* Frieze must not invent walk/talk/work from keywords in a line.
+     Real transcript text is logged with an explicit kind, not guessed here. */
   if (t.startsWith('←') || t.includes('consigne') || t.includes('envoyé') || t === '…?' || t === 'hors ligne') return 'prompt'
   if (t.includes('zzz') || t.includes('dort')) return 'other'
   return 'other'
@@ -146,8 +174,8 @@ function classify(tx: string): EvKind {
  *  zzz omitted: classify maps dort/zzz → other, so chips never appear as zzz. */
 export const SESSION_KINDS: readonly EvKind[] = ['walk', 'work', 'prompt', 'talk']
 
-function log(a: Agent, tx: string) {
-  const e: Ev = { t: hm(), a: a.name, tx, c: a.color, kind: classify(tx) }
+function log(a: Agent, tx: string, kind?: EvKind) {
+  const e: Ev = { t: hm(), a: a.name, tx, c: a.color, kind: kind ?? classify(tx) }
   feed.unshift(e)
   a.log.unshift(e)
   /* Keep enough for a compact session day strip (chronological chips in UI). */
@@ -194,145 +222,27 @@ function arrive(a: Agent) {
   }
 }
 
-/** Deduplicate successive near-identical waypoints. */
-function compactPath(pts: { x: number; z: number }[]) {
-  const out: { x: number; z: number }[] = []
-  for (const p of pts) {
-    const last = out[out.length - 1]
-    if (last && Math.hypot(p.x - last.x, p.z - last.z) < 0.08) continue
-    out.push(p)
-  }
-  return out
-}
-
-const HALL_Z = 0
-
-/** True when agent is on the corridor strip between north/south door rows. */
-function inHall(z: number) {
-  return Math.abs(z) < 1.35
-}
-
 /**
- * Which room footprint contains (x,z). Null in the hall / outside.
- * Used so mid-walk redirects exit via the physical room, not a.room
- * (a.room is already the prior destination while pathing).
- */
-function roomContaining(x: number, z: number): Room | null {
-  for (const r of rooms) {
-    if (Math.abs(x - r.x) > 4.6) continue
-    if (r.s < 0) {
-      if (z <= r.door + 0.35 && z >= r.z - 4.6) return r
-    } else {
-      if (z >= r.door - 0.35 && z <= r.z + 4.6) return r
-    }
-  }
-  return null
-}
-
-/** Apron just inside the door — past door-wall shelves/racks, before center fixtures. */
-function apronZ(r: Room) {
-  /* library/lab door flanks ~3.4–3.45; meeting table r≈1.9 → stay outside */
-  if (r.t === 'meet') return r.z - r.s * 3.35
-  return r.z - r.s * 2.2
-}
-
-type Pt = { x: number; z: number }
-
-/** Exit waypoints: leave furniture via clear aisle → door on room centerline. */
-function exitWaypoints(f: Room, ax: number, az: number): Pt[] {
-  if (f.t === 'desk' || f.t === 'lab') {
-    /* desk/lab: open spine on room.x between furniture columns */
-    return [
-      { x: f.x, z: az },
-      { x: f.x, z: f.door },
-    ]
-  }
-  /* library / meet: own lane → apron (skip center table) → door centerline */
-  const fa = apronZ(f)
-  return [
-    { x: ax, z: fa },
-    { x: f.x, z: fa },
-    { x: f.x, z: f.door },
-  ]
-}
-
-/** Enter waypoints: door → clear aisle → slot (no desk/rack/shelf clips). */
-function enterWaypoints(r: Room, q: Slot): Pt[] {
-  if (r.t === 'desk' || r.t === 'lab') {
-    return [
-      { x: r.x, z: r.door },
-      { x: r.x, z: q.z },
-      { x: q.x, z: q.z },
-    ]
-  }
-  const ra = apronZ(r)
-  if (r.t === 'library') {
-    return [
-      { x: r.x, z: r.door },
-      { x: r.x, z: ra },
-      { x: q.x, z: ra },
-      { x: q.x, z: q.z },
-    ]
-  }
-  /* meet: apron then straight to seat (ring clear of table) */
-  return [
-    { x: r.x, z: r.door },
-    { x: r.x, z: ra },
-    { x: q.x, z: q.z },
-  ]
-}
-
-/**
- * Door → corridor centerline (z≈0) → door → slot.
- * Never cuts diagonally through desks / racks / shelves / meeting table.
+ * Place the agent in a room. No path, no walk pose, no « Rejoint » line.
+ * Click, return-home, and talk-to-Réunion must not invent a walk.
  */
 export function go(a: Agent, r: Room) {
-  /* API work is not a trip: no path, no walk pose, no « Rejoint » log. */
+  /* API work is not a trip: stay put, no walk pose, no journal line. */
   if (a.bvState === 'work') {
     if (!a.path.length) a.state = 'work'
     return
   }
   const q = free(r)
   if (!q) return
-  if (a.room === r && !a.path.length) {
-    a.slot.by = null
-    q.by = a
-    a.slot = q
-    a.x = q.x
-    a.z = q.z
-    a.yaw = q.f
-    arrive(a)
-    return
-  }
-
-  const pts: Pt[] = []
-  const here = roomContaining(a.x, a.z)
-
-  if (inHall(a.z) || !here) {
-    /* already in corridor (or between rooms): join hall centerline, no interior exit */
-    pts.push({ x: a.x, z: HALL_Z }, { x: r.x, z: HALL_Z })
-  } else if (here === r) {
-    /* same physical room, just re-slot — short interior path, no hall hop */
-    if (r.t === 'desk' || r.t === 'lab') {
-      pts.push({ x: r.x, z: a.z }, { x: r.x, z: q.z }, { x: q.x, z: q.z })
-    } else {
-      const ra = apronZ(r)
-      pts.push({ x: a.x, z: ra }, { x: q.x, z: ra }, { x: q.x, z: q.z })
-    }
-  } else {
-    pts.push(...exitWaypoints(here, a.x, a.z))
-    pts.push({ x: here.x, z: HALL_Z }, { x: r.x, z: HALL_Z })
-  }
-
-  if (here !== r) pts.push(...enterWaypoints(r, q))
-
-  a.path = compactPath(pts)
+  a.path = []
   a.slot.by = null
   q.by = a
   a.slot = q
   a.room = r
-  a.state = 'walk'
-  log(a, 'Rejoint : ' + r.n)
+  a.x = q.x
+  a.z = q.z
+  a.yaw = q.f
+  a.state = animFromBv(a)
 }
 
 function homeForIndex(i: number): RoomId {
@@ -386,8 +296,8 @@ function makeAgent(b: BotJSON, index: number): Agent {
     tt: 0,
     promptPhase: 'idle',
     talkUntil: 0,
-    bubble: '',
-    bubbleUntil: 0,
+    bubble: actionLine(b.bubble),
+    bubbleUntil: actionLine(b.bubble) ? Number.POSITIVE_INFINITY : 0,
     partnerId: null,
     announcedPartner: null,
     hasTranscript: !!b.hasTranscript,
@@ -452,6 +362,14 @@ export function syncRoster(bots: BotJSON[]) {
       a.hasAvatar = !!b.hasAvatar
       a.hasTranscript = !!b.hasTranscript
       if (b.lastRole) a.role = b.lastRole
+      const act = actionLine(b.bubble)
+      if (act) {
+        a.bubble = act
+        a.bubbleUntil = Number.POSITIVE_INFINITY
+      } else if (!actionLine(a.bubble)) {
+        a.bubble = ''
+        a.bubbleUntil = 0
+      }
       /* hasTranscript never gates bvState — tag reads API state only. */
       const st = canonBv(b.state)
       if (st !== a.bvState) applyBvState(a, st, false)
@@ -475,6 +393,7 @@ export function syncRoster(bots: BotJSON[]) {
 }
 
 function clearBubble(a: Agent) {
+  if (actionLine(a.bubble)) return
   a.bubble = ''
   a.bubbleUntil = 0
 }
@@ -491,7 +410,7 @@ export function applyBvState(a: Agent, state: BvState, announce = true) {
   }
   if (state === 'idle') {
     clearBubble(a)
-    if (announce && prev !== 'idle') log(a, 'Idle · ' + a.room.n)
+    if (announce && prev !== 'idle') log(a, 'Repos · ' + a.room.n)
     if (a.room.id !== a.home && !a.path.length) go(a, RM[a.home])
     else if (!a.path.length) { a.state = 'idle'; a.yaw = a.slot.f }
     emit()
@@ -542,23 +461,14 @@ export function applyActivity(msg: {
   if (msg.role) a.role = msg.role
   let showedBubble = false
   if (msg.bubble) {
-    const raw = String(msg.bubble).trim()
-    /* reject invented status / filler — bubble = real transcript/action only */
-    const banned = /^(travaille|marche|en discussion|en déplacement|idle|zzz…?|zzz|on it|hey!|got it|listening|mm\?|yo|hmm|collabore|…|\.\.\.)$/i
-    if (raw && !banned.test(raw)) {
+    const raw = actionLine(msg.bubble)
+    /* Only « Verbe · cible ». A chat sentence is not shown and not relabeled. */
+    if (raw) {
       showedBubble = true
-      log(a, raw)
-      /* CSS line-clamp handles multi-line; hard cap keeps DOM light */
-      a.bubble = raw.length > 96 ? raw.slice(0, 94) + '…' : raw
-      a.bubbleUntil = performance.now() + 5600
-      const until = a.bubbleUntil
-      window.setTimeout(() => {
-        if (a.bubbleUntil === until) {
-          clearBubble(a)
-          emit()
-        }
-      }, 5700)
-      /* Keep work desk pose — only talk bubbles flip to collab. */
+      log(a, raw, 'work')
+      a.bubble = raw
+      a.bubbleUntil = Number.POSITIVE_INFINITY
+/* Keep work desk pose — only talk bubbles flip to collab. */
       if (a.bvState === 'talk') {
         a.talkUntil = Math.max(a.talkUntil, performance.now() + 4500)
         if (a.state !== 'walk') a.state = 'collab'

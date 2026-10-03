@@ -8,7 +8,7 @@ const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v))
 function Rig(){
  /* camera: overview fits all 6 rooms; viewOffset shifts optical center into left of HUD */
  const {gl,camera,size}=useThree()
- const HOME={az:.82,el:.48,dist:46} /* classic ¾ overview */
+ const HOME={az:.82,el:.48,dist:34} /* closer ¾ so the office fills the pane left of the rail */
  const s=useRef({az:HOME.az,el:HOME.el,dist:HOME.dist,distWant:HOME.dist,tgt:new THREE.Vector3(),vaz:0,vel:0,vzoom:0,dragging:false,booted:false})
  const want=useMemo(()=>new THREE.Vector3(),[]),camWant=useMemo(()=>new THREE.Vector3(),[])
  useEffect(()=>{const el=gl.domElement,v=s.current;let d=false

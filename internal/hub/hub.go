@@ -130,17 +130,17 @@ func (h *Hub) HandleLine(line tail.Line) {
 	case snippets.KindUser:
 		state = "talk"
 		// brief clean user prompt when extractable; never invent
-		bubble = snippets.SnippetText(line.Data)
+		bubble = snippets.ActionLine(line.Data)
 		rt.until = now.Add(transcriptTalkHold)
 	case snippets.KindTool:
 		state = "work"
-		// concrete tool name when extractable; empty better than "Travaille"
-		bubble = snippets.SnippetText(line.Data)
+		// Lit/Modifie/Consulte/Recherche only — never a chat sentence or a status word
+		bubble = snippets.ActionLine(line.Data)
 		rt.until = now.Add(transcriptWorkHold)
 	case snippets.KindAssist:
 		state = "talk"
-		// real assistant prose only — never GenericChatter / status filler
-		bubble = snippets.SnippetText(line.Data)
+		// action form only; a chat sentence is not a file read
+		bubble = snippets.ActionLine(line.Data)
 		rt.until = now.Add(transcriptTalkHold)
 	default:
 		// Unclassified JSONL must not invent walk/work/talk.
@@ -236,6 +236,22 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	bots, _ := h.RefreshRoster()
 	_ = conn.WriteJSON(Activity{Type: "roster", Bots: bots})
+	// One real line already on disk (existing jsonl only). No state change,
+	// so gateway work/idle is not invented or cleared. No file is written.
+	for _, b := range bots {
+		text := b.Bubble
+		if text == "" && b.Transcript != "" {
+			var err error
+			text, err = tail.LastAction(b.Transcript)
+			if err != nil {
+				continue
+			}
+		}
+		if text == "" {
+			continue
+		}
+		_ = conn.WriteJSON(Activity{Type: "state", AgentID: b.ID, Bubble: text})
+	}
 
 	defer func() {
 		h.mu.Lock()

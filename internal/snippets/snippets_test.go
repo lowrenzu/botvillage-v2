@@ -135,3 +135,20 @@ func TestIsExplicitIdle(t *testing.T) {
 		t.Fatal("prose mentioning idle is not a signal")
 	}
 }
+
+func TestActionLineReadNotChat(t *testing.T) {
+	chat := []byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"Push: ship the kill list now"}]}}`)
+	if got := ActionLine(chat); got != "" {
+		t.Fatalf("chat must not become a verb, got %q", got)
+	}
+	read := []byte(`{"role":"assistant","message":{"content":[{"type":"tool_use","name":"read","input":{"path":"/workspace/grok_recriture/bd/NOTE_KILL_LOT1_GO_20260913.md"}}]}}`)
+	got := ActionLine(read)
+	want := "Lit · /workspace/grok_recriture/bd/NOTE_KILL_LOT1_GO_20260913.md"
+	if got != want {
+		t.Fatalf("got %q", got)
+	}
+	shell := []byte(`{"role":"assistant","message":{"content":[{"type":"tool_use","name":"shell","input":{"command":"cat /tmp/x"}}]}}`)
+	if got := ActionLine(shell); got != "" {
+		t.Fatalf("shell is not Lit, got %q", got)
+	}
+}

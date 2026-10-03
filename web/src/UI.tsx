@@ -1,29 +1,30 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import {
   agents, feed, link, ui, useSim, sendPrompt, selectAgent, toggleFollow, promptToken, setPromptToken,
-  sessionDayTimeline, byVotes, castVote, voteOf,
-  type Agent, type Ev, type EvKind, type PromptPhase,
+  sessionDayTimeline, byVotes, castVote, voteOf, skillBooks, setSkillsOpen, setCompetencesOpen,
+  actionLine,
+  type Agent, type Ev, type EvKind, type PromptPhase, type SkillJSON,
 } from './sim'
 
 const ST: Record<string, string> = {
   work: 'Travaille',
   collab: 'Discussion · déduit',
   walk: 'Marche',
-  sleep: 'Idle',
-  idle: 'Idle',
+  sleep: 'Repos',
+  idle: 'Repos',
 }
 const BV: Record<string, string> = {
-  idle: 'Idle',
+  idle: 'Repos',
   walk: 'Marche',
   work: 'Travaille',
   talk: 'Discussion',
-  zzz: 'Idle',
+  zzz: 'Repos',
 }
 const PHASE: Record<PromptPhase, string> = {
-  idle: 'Idle',
-  sent: 'Sent',
-  acked: 'Acked',
-  silent: 'Silent',
+  idle: 'Repos',
+  sent: 'Envoyée',
+  acked: 'Reçue',
+  silent: 'Sans réponse',
 }
 const PHASE_HINT: Record<PromptPhase, string> = {
   idle: 'Aucune consigne en cours',
@@ -40,9 +41,9 @@ const KIND_ICON: Record<EvKind, string> = {
   other: '·',
 }
 const PROMPT_CHIPS = [
-  { label: 'Statut ?', text: 'Quel est ton statut actuel ?', target: '' },
-  { label: 'Revue', text: 'Fais une brève revue de ta tâche en cours.', target: '' },
-  { label: 'Suite', text: 'Quelle est la prochaine étape ?', target: '' },
+  { label: 'Quel est ton statut ?', text: 'Quel est ton statut actuel ?', target: '' },
+  { label: 'Revue de la tâche', text: 'Fais une brève revue de ta tâche en cours.', target: '' },
+  { label: 'Prochaine étape', text: 'Quelle est la prochaine étape ?', target: '' },
 ]
 
 const initial = (name: string) => (name.trim()[0] || '?').toUpperCase()
@@ -50,9 +51,13 @@ const initial = (name: string) => (name.trim()[0] || '?').toUpperCase()
 function friezeLabel(e: Ev): string {
   const k = e.kind || 'other'
   if (k === 'prompt') return 'Consigne'
-  if (k === 'zzz') return 'Idle'
+  if (k === 'zzz') return 'Repos'
   if (k === 'walk') return e.tx.startsWith('Rejoint') ? e.tx.replace('Rejoint : ', '→ ') : 'Marche'
-  if (k === 'work') return 'Travaille'
+  if (k === 'work') {
+    /* Status word stays « Travaille ». A real transcript line is shown as itself. */
+    if (e.tx.startsWith('Travaille')) return 'Travaille'
+    return e.tx.length > 16 ? e.tx.slice(0, 14) + '…' : e.tx
+  }
   if (k === 'talk') {
     if (e.tx.startsWith('Discussion avec') || e.tx.startsWith('Collabore avec')) {
       const who = e.tx.replace(/^Discussion avec |^Collabore avec /, '')
@@ -110,6 +115,7 @@ export function UI() {
   }
 
   return (
+    <>
     <aside className={'hud-rail' + (railOpen ? '' : ' collapsed')} aria-label="Bureau des agents">
       <header className="rail-head">
         <div className="mast-brand">
@@ -134,9 +140,9 @@ export function UI() {
       {railOpen && (
         <>
       <div className="rail-stats">
-        <span><i className="dot-live" />{agents.length} roster</span>
-        <span>{working} travail</span>
-        <span>{collab ? collab + ' discussion' : sleeping + ' idle'}</span>
+        <span><i className="dot-live" />{agents.length} au roster</span>
+        <span>{working} au travail</span>
+        <span>{collab ? collab + ' en discussion' : sleeping + ' au repos'}</span>
       </div>
 
       {agents.length > 0 && (
@@ -157,13 +163,14 @@ export function UI() {
                 </span>
               )}
               <span className="roster-name">{x.name}</span>
+              {actionLine(x.bubble) ? <em className="roster-action">{actionLine(x.bubble)}</em> : null}
               <span className="vote-n" title="Votes locaux">{voteOf('agents', x.id)}</span>
               <span className="vote-btns">
                 <i role="button" aria-label="Plus" onClick={ev => { ev.stopPropagation(); castVote('agents', x.id, 1) }}>+</i>
                 <i role="button" aria-label="Moins" onClick={ev => { ev.stopPropagation(); castVote('agents', x.id, -1) }}>−</i>
               </span>
               {!x.hasTranscript ? (
-                <em className="roster-nofeed" title="Pas de transcript jsonl — pas de feed bulle/WS">no feed</em>
+                <em className="roster-nofeed" title="Pas de transcript jsonl — pas de bulle ni de fil">sans fil</em>
               ) : null}
               {x.promptPhase !== 'idle' ? (
                 <em className={'roster-phase phase-' + x.promptPhase} title={PHASE_HINT[x.promptPhase]}>
@@ -176,66 +183,56 @@ export function UI() {
         </div>
       )}
 
-      <p className="honest-note" title="Arêtes bleues 3D = pairing local (talkUntil), pas un lien transcript.">Arêtes bleues = déduit</p>
-      <div className="day-strip" aria-label="Mini timeline de session">
+      {agents.some(x => x.partnerId) ? (
+        <p className="honest-note" title="Arêtes bleues 3D = pairing local (talkUntil), pas un lien transcript.">Arêtes bleues = déduit</p>
+      ) : null}
+      {dayStrip.length > 0 && <div className="day-strip" aria-label="Mini timeline de session">
         <div className="day-strip-head">
           <span className="day-strip-title">Session</span>
         </div>
         <div className="frieze day-frieze" role="list">
-          {dayStrip.length === 0 ? (
-            <span className="frieze-chip kind-other day-empty" role="listitem">
-              <b>·</b>
-              <span>en attente d’événements réels</span>
-            </span>
-          ) : (
-            dayStrip.map((e, i) => {
-              const k = (e.kind || 'other') as EvKind
-              return (
-                <span
-                  key={i + ':' + e.t + ':' + e.a + ':' + e.tx}
-                  role="listitem"
-                  className={'frieze-chip kind-' + k}
-                  title={`${e.t.slice(0, 5)} · ${e.a} · ${e.tx}`}
-                >
-                  <time>{e.t.slice(0, 5)}</time>
-                  <i style={{ background: e.c }} />
-                  <b>{KIND_ICON[k]}</b>
-                  <em>{e.a.split(' ')[0]}</em>
-                  <span>{friezeLabel(e)}</span>
-                </span>
-              )
-            })
-          )}
+          {dayStrip.map((e, i) => {
+            const k = (e.kind || 'other') as EvKind
+            return (
+              <span
+                key={i + ':' + e.t + ':' + e.a + ':' + e.tx}
+                role="listitem"
+                className={'frieze-chip kind-' + k}
+                title={`${e.t.slice(0, 5)} · ${e.a} · ${e.tx}`}
+              >
+                <time>{e.t.slice(0, 5)}</time>
+                <i style={{ background: e.c }} />
+                <b>{KIND_ICON[k]}</b>
+                <em>{e.a.split(' ')[0]}</em>
+                <span>{friezeLabel(e)}</span>
+              </span>
+            )
+          })}
           <div ref={dayEndRef} className="day-strip-end" aria-hidden />
         </div>
-      </div>
+      </div>}
 
       <div className="rail-body">
         {a ? <AgentCard a={a} mates={mates} /> : (
           <p className="empty">Sélectionnez un agent pour lui envoyer une consigne.</p>
         )}
 
-        <div className="live">
-          <p className="live-title">Activité</p>
-          {feed.slice(0, 3).map((e, i) => (
-            <p key={i}>
-              <i className="fd" style={{ background: e.c }} />
-              <span className="body">
-                <span className="who">{e.a}</span>
-                {' · '}
-                <span className="tx">{e.tx}</span>
-              </span>
-              <time>{e.t.slice(0, 5)}</time>
-            </p>
-          ))}
-          {!feed.length && (
-            <p>
-              <i className="fd" style={{ background: 'var(--mu)' }} />
-              <span className="body"><span className="tx">en attente d’événements</span></span>
-              <time>—</time>
-            </p>
-          )}
-        </div>
+        {feed.length > 0 && (
+          <div className="live">
+            <p className="live-title">Activité</p>
+            {feed.slice(0, 3).map((e, i) => (
+              <p key={i}>
+                <i className="fd" style={{ background: e.c }} />
+                <span className="body">
+                  <span className="who">{e.a}</span>
+                  {' · '}
+                  <span className="tx">{e.tx}</span>
+                </span>
+                <time>{e.t.slice(0, 5)}</time>
+              </p>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="prompt-block">
@@ -255,16 +252,16 @@ export function UI() {
             </svg>
           </button>
         </form>
-        <label className="token-row">
-          <span>Jeton</span>
+        <details className="token-row">
+          <summary>Jeton</summary>
           <input
             type="password"
             value={token}
             autoComplete="off"
-            placeholder="X-Village-Token (mémoire ; cookie opaque après login)"
+            placeholder="X-Village-Token"
             onChange={e => { setToken(e.target.value); setPromptToken(e.target.value) }}
           />
-        </label>
+        </details>
         <div className="prompt-chips">
           {PROMPT_CHIPS.map(c => (
             <button
@@ -282,7 +279,7 @@ export function UI() {
               type="button"
               className="chip-btn chip-grok-build"
               title="Envoie vers xAI (target grok-build)"
-              onClick={() => onChip(draft.trim() || 'Statut ?', 'grok-build')}
+              onClick={() => onChip(draft.trim() || 'Quel est ton statut actuel ?', 'grok-build')}
             >
               Grok Build
             </button>
@@ -299,6 +296,66 @@ export function UI() {
         </div>
       ) : null}
 </aside>
+      {ui.skillsOpen ? <CatalogSheet kind="skills" /> : null}
+      {ui.competencesOpen ? <CatalogSheet kind="competences" /> : null}
+    </>
+  )
+}
+
+const SKILL_GROUPS: { source: string; label: string; color: string }[] = [
+  { source: 'user', label: 'Utilisateur', color: '#58b3ab' },
+  { source: 'managed', label: 'Gérés', color: '#c9a84a' },
+  { source: 'plugin', label: 'Plugins', color: '#5e9bd6' },
+]
+
+function CatalogSheet({ kind }: { kind: 'skills' | 'competences' }) {
+  const close = () => (kind === 'skills' ? setSkillsOpen(false) : setCompetencesOpen(false))
+  const title = kind === 'skills' ? 'Skills' : 'Compétences'
+  const empty = kind === 'skills' ? 'Aucun skill' : 'Aucune compétence'
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [kind])
+  const known = new Set(SKILL_GROUPS.map(g => g.source))
+  const extra = [...new Set(skillBooks.map(s => s.source).filter(s => s && !known.has(s)))]
+  const groups = [
+    ...SKILL_GROUPS.map(g => ({ ...g, items: skillBooks.filter(s => s.source === g.source) })),
+    ...extra.map(source => ({ source, label: source, color: '#8a847c', items: skillBooks.filter(s => s.source === source) })),
+  ].filter(g => g.items.length > 0)
+  return (
+    <div className="skills-back" onClick={close}>
+      <div className="skills-sheet" role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
+        <header className="rail-head">
+          <div className="mast-brand">
+            <strong>{title}</strong>
+            <em>Catalogue</em>
+          </div>
+          <button type="button" className="chip-btn" onClick={close}>Fermer</button>
+        </header>
+        <div className="rail-stats">
+          <span><i className="dot-live" />{skillBooks.length} au catalogue</span>
+        </div>
+        {skillBooks.length === 0 ? (
+          <p className="empty">{empty}</p>
+        ) : (
+          <div className="roster">
+            {groups.map(g => (
+              <div key={g.source} className="skill-group">
+                <p className="live-title">{g.label}</p>
+                {g.items.map((s: SkillJSON) => (
+                  <div key={g.source + ':' + s.id} className="skill-row">
+                    <span className="av" style={{ background: g.color }}>{(s.name.trim()[0] || '?').toUpperCase()}</span>
+                    <span className="roster-name">{s.name}</span>
+                    <em className="skill-id">{s.id}</em>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -336,30 +393,29 @@ function AgentCard({ a, mates }: { a: Agent; mates: Agent[] }) {
         </span>
       </div>
 
-      <div
-        className={'phase-badge phase-' + a.promptPhase}
-        title={PHASE_HINT[a.promptPhase]}
-        role="status"
-      >
-        <i className="phase-dot" />
-        <b>Prompt</b>
-        <span className="phase-key">{PHASE[a.promptPhase]}</span>
-      </div>
-
-      {/* État réel seulement — plus de % inventé (P0) */}
-      <div className="work">
-        <div className="lbl">
-          <span>État</span>
-          <b>{stateLabel}</b>
+      {a.promptPhase !== 'idle' && (
+        <div
+          className={'phase-badge phase-' + a.promptPhase}
+          title={PHASE_HINT[a.promptPhase]}
+          role="status"
+        >
+          <i className="phase-dot" />
+          <b>Consigne</b>
+          <span className="phase-key">{PHASE[a.promptPhase]}</span>
         </div>
-        {a.goal ? (
-          <p className="task" title={a.goal}>
-            Extrait · {a.goal.length > 48 ? a.goal.slice(0, 48) + '…' : a.goal}
-          </p>
-        ) : a.title ? (
-          <p className="task" title={a.title}>Extrait · {a.title.length > 48 ? a.title.slice(0, 48) + '…' : a.title}</p>
-        ) : null}
-      </div>
+      )}
+
+      {(a.goal || a.title) && (
+        <div className="work">
+          {a.goal ? (
+            <p className="task" title={a.goal}>
+              Extrait · {a.goal.length > 48 ? a.goal.slice(0, 48) + '…' : a.goal}
+            </p>
+          ) : (
+            <p className="task" title={a.title}>Extrait · {a.title.length > 48 ? a.title.slice(0, 48) + '…' : a.title}</p>
+          )}
+        </div>
+      )}
 
       {a.log.length > 0 && (
         <div className="mini-tl" aria-label="Timeline">

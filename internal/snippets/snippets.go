@@ -41,9 +41,10 @@ type messageBody struct {
 }
 
 type contentPart struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
-	Text string `json:"text"`
+	Type  string          `json:"type"`
+	Name  string          `json:"name"`
+	Text  string          `json:"text"`
+	Input json.RawMessage `json:"input"`
 }
 
 // ClassifyLine inspects one JSONL line and returns a Kind + role.
@@ -306,4 +307,84 @@ func GoalWord(title, description string) string {
 		out = append(out, f)
 	}
 	return clip(strings.Join(out, " "))
+}
+
+// ActionLine returns « Verbe · cible » only when this JSONL line is itself
+// that action: a read path, an edit path, a fetched URL, or a search subject.
+// Chat sentences and other tools return "" — never relabel them.
+func ActionLine(line []byte) string {
+	line = trimSpace(line)
+	if len(line) == 0 {
+		return ""
+	}
+	var env lineEnvelope
+	if err := json.Unmarshal(line, &env); err != nil {
+		return ""
+	}
+	raw := env.Message
+	if len(raw) == 0 {
+		raw = line
+	}
+	var msg messageBody
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		var parts []contentPart
+		if err2 := json.Unmarshal(raw, &parts); err2 != nil {
+			return ""
+		}
+		msg.Content = parts
+	}
+	for _, part := range msg.Content {
+		if s := actionFromPart(part); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func actionFromPart(p contentPart) string {
+	if p.Type != "tool_use" && p.Type != "tool_call" {
+		return ""
+	}
+	name := strings.ToLower(strings.TrimSpace(p.Name))
+	var in map[string]any
+	if len(p.Input) > 0 && json.Unmarshal(p.Input, &in) != nil {
+		return ""
+	}
+	pick := func(keys ...string) string {
+		for _, k := range keys {
+			v, _ := in[k].(string)
+			v = strings.Join(strings.Fields(v), " ")
+			if v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+	var verb, target string
+	switch name {
+	case "read", "read_file":
+		verb, target = "Lit", pick("path", "file_path", "target_file")
+	case "edit", "strreplace", "search_replace", "apply_patch", "write":
+		verb, target = "Modifie", pick("path", "file_path", "target_file")
+	case "web_fetch", "webfetch":
+		verb, target = "Consulte", pick("url")
+	case "web_search":
+		verb, target = "Recherche", pick("search_term", "query")
+	case "grep":
+		verb, target = "Recherche", pick("pattern", "query")
+	default:
+		return ""
+	}
+	if verb == "" || target == "" {
+		return ""
+	}
+	if hiddenPrompt.MatchString(target) || secretKeyword.MatchString(target) || longToken.MatchString(target) {
+		return ""
+	}
+	s := verb + " · " + target
+	if utf8.RuneCountInString(s) > MaxBubbleRunes {
+		runes := []rune(s)
+		s = string(runes[:MaxBubbleRunes-1]) + "…"
+	}
+	return s
 }

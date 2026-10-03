@@ -94,3 +94,41 @@ func TestTruncateResets(t *testing.T) {
 		t.Fatalf("got %#v", got)
 	}
 }
+
+func TestLastNonEmptyLine(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	body := "one\n{\"role\":\"assistant\"}\n\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LastNonEmptyLine(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"role":"assistant"}` {
+		t.Fatalf("got %q", got)
+	}
+	missing, err := LastNonEmptyLine(filepath.Join(dir, "nope.jsonl"))
+	if err != nil || missing != nil {
+		t.Fatalf("missing: %q %v", missing, err)
+	}
+}
+
+func TestLastActionSkipsChat(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	body := "{\"role\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Push: ship the kill list now\"}]}}\n" +
+		"{\"role\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"read\",\"input\":{\"path\":\"/tmp/a.md\"}}]}}\n" +
+		"{\"role\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"P0 check: bulle\"}]}}\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LastAction(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "Lit · /tmp/a.md" {
+		t.Fatalf("got %q", got)
+	}
+}

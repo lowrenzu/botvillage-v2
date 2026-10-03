@@ -4,12 +4,15 @@ package tail
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"botvillage/internal/snippets"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -296,4 +299,85 @@ func (w *Watcher) ReadOnce(path string) []Line {
 		got = append(got, <-w.out)
 	}
 	return got
+}
+
+// LastNonEmptyLine returns the last complete non-empty line of an existing
+// JSONL file. It does not invent a line: missing, empty, or unreadable → nil.
+// Only the tail of the file is read.
+func LastNonEmptyLine(path string) ([]byte, error) {
+	if path == "" {
+		return nil, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	size := st.Size()
+	if size == 0 {
+		return nil, nil
+	}
+	const window = 64 * 1024
+	start := int64(0)
+	if size > window {
+		start = size - window
+	}
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return nil, err
+	}
+	buf := make([]byte, size-start)
+	if _, err := io.ReadFull(f, buf); err != nil {
+		return nil, err
+	}
+	if start > 0 {
+		i := bytes.IndexByte(buf, '\n')
+		if i < 0 {
+			return nil, nil
+		}
+		buf = buf[i+1:]
+	}
+	buf = bytes.TrimRight(buf, "\r\n")
+	if i := bytes.LastIndexByte(buf, '\n'); i >= 0 {
+		buf = buf[i+1:]
+	}
+	buf = bytes.TrimSpace(buf)
+	if len(buf) == 0 {
+		return nil, nil
+	}
+	return append([]byte(nil), buf...), nil
+}
+
+// LastAction walks an existing JSONL file and returns the last real
+// « Verbe · cible » action. Chat lines are ignored. Missing file → "".
+func LastAction(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
+	last := ""
+	for sc.Scan() {
+		if s := snippets.ActionLine(sc.Bytes()); s != "" {
+			last = s
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return "", err
+	}
+	return last, nil
 }

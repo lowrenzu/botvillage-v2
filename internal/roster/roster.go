@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"botvillage/internal/snippets"
+	"botvillage/internal/tail"
 )
 
 // Bot is a villager on the island.
@@ -31,6 +32,8 @@ type Bot struct {
 	Transcript string `json:"-"`
 	// HasTranscript is true when a transcript jsonl exists and is non-empty.
 	HasTranscript bool `json:"hasTranscript"`
+	// Bubble is « Verbe · cible » from a real read/edit/url/search line, or empty.
+	Bubble string `json:"bubble,omitempty"`
 }
 
 type profileJSON struct {
@@ -134,6 +137,11 @@ func (r Root) loadBot(id string, idx int) Bot {
 	}
 	b.Transcript = r.findTranscript(id)
 	b.HasTranscript = transcriptNonempty(b.Transcript)
+	if b.HasTranscript {
+		if act, err := tail.LastAction(b.Transcript); err == nil {
+			b.Bubble = act
+		}
+	}
 	return b
 }
 

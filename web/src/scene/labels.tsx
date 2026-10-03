@@ -27,11 +27,13 @@ const etchLabel=(name:string,accent:string)=>{const c=document.createElement('ca
 const RoomLabel=({r}:{r:Room})=>{
  const map=useMemo(()=>etchLabel(r.n,r.c),[r.n,r.c])
  /* was 6.6×1.7 @ y=.14 — now ~40% larger + slightly raised */
- return <mesh rotation={[-Math.PI/2,0,0]} position={[r.x,.16,r.z]} receiveShadow
-  onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel)go(ui.sel,r)}}>
-  <planeGeometry args={[9.2,2.4]}/>
-  <meshStandardMaterial map={map} transparent depthWrite={false} roughness={.82} metalness={.04} polygonOffset polygonOffsetFactor={-2}/>
- </mesh>}
+ return <group position={[r.x,.16,r.z]} rotation={[0,Math.PI,0]}>
+  <mesh rotation={[-Math.PI/2,0,0]} receiveShadow
+   onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel)go(ui.sel,r)}}>
+   <planeGeometry args={[9.2,2.4]}/>
+   <meshStandardMaterial map={map} transparent depthWrite={false} roughness={.82} metalness={.04} polygonOffset polygonOffsetFactor={-2}/>
+  </mesh>
+ </group>}
 
 const initTex=(letter:string)=>{
  const c=document.createElement('canvas');c.width=128;c.height=64;const x=c.getContext('2d')!
