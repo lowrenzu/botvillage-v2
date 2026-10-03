@@ -410,7 +410,7 @@ export function applyBvState(a: Agent, state: BvState, announce = true) {
   }
   if (state === 'idle') {
     clearBubble(a)
-    if (announce && prev !== 'idle') log(a, 'Repos · ' + a.room.n)
+    if (announce && prev !== 'idle') log(a, 'Idle · ' + a.room.n)
     if (a.room.id !== a.home && !a.path.length) go(a, RM[a.home])
     else if (!a.path.length) { a.state = 'idle'; a.yaw = a.slot.f }
     emit()
@@ -420,7 +420,7 @@ export function applyBvState(a: Agent, state: BvState, announce = true) {
   if (state === 'talk') {
     a.talkUntil = Math.max(a.talkUntil, performance.now() + 7000)
     /* feed = operational status; bubble stays real content only (never invent) */
-    if (announce) log(a, a.role ? `Parle · ${a.role}` : 'En discussion')
+    if (announce) log(a, a.role ? `Parle · ${a.role}` : 'Parle')
     if (a.room !== target) go(a, target)
     else {
       a.state = 'collab'
@@ -428,7 +428,7 @@ export function applyBvState(a: Agent, state: BvState, announce = true) {
     }
   } else if (state === 'work') {
     clearPartner(a)
-    if (announce) log(a, 'Travaille' + (a.role ? ` · ${a.role}` : ''))
+    if (announce) log(a, 'Travail' + (a.role ? ` · ${a.role}` : ''))
     /* do not put status into a.bubble — wait for WS tool name / transcript */
     if (a.room.t !== 'desk') go(a, target)
     else { a.state = 'work' }
