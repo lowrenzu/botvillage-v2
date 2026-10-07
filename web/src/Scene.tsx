@@ -7,6 +7,8 @@ import { RoomLabel } from './scene/labels'
 import { AgentView } from './scene/AgentView'
 import { TalkBeams, Tick } from './scene/TalkBeams'
 import { Rig } from './scene/Rig'
+import { LabelLayer } from './hud/LabelLayer'
+import { RoomChips } from './hud/RoomChips'
 
 export function Scene(){
  /* useSim only for roster mount/unmount + selection prop — not per-frame motion */
@@ -25,6 +27,7 @@ export function Scene(){
  <ContactShadows position={[0,0.02,0]} opacity={0.28} scale={36} blur={2.6} far={6} color="#2a2620"/>
  {rooms.map(r=><RoomView key={r.id} r={r}/>)}{rooms.map(r=><RoomLabel key={r.id+"-lbl"} r={r}/>)}
  {agents.map(a=><AgentView key={a.id} a={a} selected={ui.sel===a} bvState={a.bvState}/>)}
+ <RoomChips/>
  <TalkBeams/>
- <Rig/><Tick/></>}
+ <Rig/><Tick/><LabelLayer/></>}
 

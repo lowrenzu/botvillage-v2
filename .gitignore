@@ -15,6 +15,9 @@ botvillage-*
 web/node_modules/
 web/dist/
 
+# dev-only vite config that opens the dev server to a remote preview host
+web/vite.sandbox.config.ts
+
 # OS / editor
 .DS_Store
 *.swp

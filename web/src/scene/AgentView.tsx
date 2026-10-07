@@ -94,8 +94,10 @@ const AgentView=memo(function AgentView({a,selected,bvState}:{a:Agent;selected:b
   const twalk=walking?1:0;v.walk+=(twalk-v.walk)*(1-Math.exp(-dt*3))
   const rate=1.4+v.walk*2.2
   const pu=.5+.5*Math.sin(t*rate+ph)
-  ring.current.scale.setScalar(1+pu*.08)
-  ;(ring.current.material as THREE.MeshBasicMaterial).opacity=.5+pu*.3
+  /* hover lifts the ground ring — the only 3D hover cue that costs nothing */
+  const hov=hot.current?1:0
+  ring.current.scale.setScalar(1+pu*.08+hov*.1)
+  ;(ring.current.material as THREE.MeshBasicMaterial).opacity=.5+pu*.3+hov*.2
   /* membres : démarche (genoux, coudes), bras sur le clavier au poste */
   const sw=Math.sin(t*9+ph)*v.walk,ak=1-Math.exp(-dt*8),typ=atDeskWork?Math.sin(t*15+ph)*.04:0
   const tg=(r:GR,x:number)=>{if(r.current)r.current.rotation.x+=(x-r.current.rotation.x)*ak}
@@ -137,17 +139,13 @@ const AgentView=memo(function AgentView({a,selected,bvState}:{a:Agent;selected:b
     bubbleText.current.textContent=''
    }
   }
-  if(tagWrap.current){
-   proj.set(v.x,2.2,v.z).project(camera)
-   /* Prefer always-visible labels; only hide when behind camera frustum */
-   const behind=proj.z>1
-   tagWrap.current.style.visibility=behind?'hidden':''
-   if(tagNode&&tagNode.textContent!==label) tagNode.textContent=label
-  }
+  /* Visibility / declutter of the chip is owned by hud/LabelLayer (11 Hz, screen-space).
+     Here we only keep the word in sync on a bvState change. */
+  if(tagNode&&tagNode.textContent!==label) tagNode.textContent=label
  })
  return <group ref={g} scale={1.45}
-  onPointerOver={e=>{e.stopPropagation();hot.current=true;ui.hoverAgent=a}}
-  onPointerOut={()=>{hot.current=false;if(ui.hoverAgent===a)ui.hoverAgent=null}}>
+  onPointerOver={e=>{e.stopPropagation();hot.current=true;ui.hoverAgent=a;document.body.style.cursor='pointer'}}
+  onPointerOut={()=>{hot.current=false;if(ui.hoverAgent===a)ui.hoverAgent=null;document.body.style.cursor=''}}>
   <mesh rotation={[-Math.PI/2,0,0]} position={[0,.012,0]}><circleGeometry args={[.5,32]}/><meshBasicMaterial color="#000" transparent opacity={.12} depthWrite={false}/></mesh>
   <group ref={body} onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX)selectAgent(a)}}>
    {/* jambes : hanche, cuisse, genou, tibia, cheville, pied. +x = droite. */}
@@ -203,13 +201,14 @@ const AgentView=memo(function AgentView({a,selected,bvState}:{a:Agent;selected:b
   <mesh ref={ring} rotation={[-Math.PI/2,0,0]} position={[0,.04,0]}><ringGeometry args={[.68,selected?.82:.72,64]}/><meshBasicMaterial color={a.color} transparent side={THREE.DoubleSide}/></mesh>
   {/* Transcript chip — same markup for every agent. Shown only while a real bubble is live. */}
   <Html position={[0,2.65,0]} center zIndexRange={[50,40]} className="speech-bubble-html">
-   <div ref={bubbleWrap} className="speech-bubble" aria-hidden>
+   <div ref={bubbleWrap} id={'bvbubble-'+a.id} className="speech-bubble" aria-hidden>
     <div ref={bubbleText} className="speech-bubble-text"></div>
    </div>
   </Html>
   {/* Status chip for every bot. Word only — no name, no avatar. */}
   <Html position={[0,2.2,0]} center zIndexRange={[30,20]} style={{pointerEvents:'none'}}>
-   <div ref={tagWrap} className="tag">
+   <div ref={tagWrap} className={'tag'+(selected?' on':'')}>
+    <b className="tag-name">{a.name}</b>
     <small id={'bvtag-'+a.id} ref={tagState as any}>{bvTagLabel(bvState)}</small>
    </div>
   </Html>

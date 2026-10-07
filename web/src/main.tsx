@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { Scene } from './Scene'
 import { UI } from './UI'
 import { connectLive } from './sim'
+import { SceneStatus } from './hud/SceneStatus'
 import './style.css'
 
 connectLive()
@@ -18,5 +19,6 @@ createRoot(document.getElementById('root')!).render(
       <Scene />
     </Canvas>
     <UI />
+    <SceneStatus />
   </>,
 )

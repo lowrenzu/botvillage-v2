@@ -106,6 +106,33 @@ go build -o botvillage .
 
 Le build écrit `static/`. Ne commit pas `web/node_modules/`.
 
+## Lisibilité in-scène
+
+Les chips 3D ne se marchent plus dessus. Un seul passe décide, en espace écran, qui garde son mot.
+
+| Module | Rôle |
+|---|---|
+| `web/src/hud/labelLayout.ts` | projection + résolution des chevauchements (calcul pur, testable) |
+| `web/src/hud/LabelLayer.tsx` | pilote les chips existantes à ~11 Hz : visibilité, fondu de distance, mode point |
+| `web/src/hud/RoomChips.tsx` | pastille par salle : nom + compteurs travail / parle (bvState seulement) |
+| `web/src/hud/SceneStatus.tsx` | bandeau Live / Down / Off + compteurs, hors du rail |
+| `web/src/hud/reserved.ts` | rectangles HUD mis en cache — plus de `getBoundingClientRect()` par frame |
+
+Conventions d’id (le pilote ne crée pas de markup, il style l’existant) : `bvtag-<id>` (mot d’état), `bvbubble-<id>` (bulle), `roomchip-<id>` (salle).
+
+Ordre de priorité : sélectionné → survol → consigne en cours → Parle → Travail → Marche → Idle. Une chip qui ne tient pas devient un point à la couleur du roster, posé sur l’ancre puis juste au-dessus ou en dessous. Sous le rail ou le bandeau, elle disparaît au lieu de passer devant le HUD. Une salle vide s’estompe, une salle active garde son liseré.
+
+## Aperçu front sans Go
+
+Le bureau a besoin d’un backend pour le roster. À défaut de binaire Go :
+
+```bash
+node scripts/mock-village.mjs 8040   # /api/health, /api/bots, /api/skills, /ws — 12 bots qui bougent
+cd web && npx vite                   # proxy /api, /ws, /avatars → 127.0.0.1:8040
+```
+
+`scripts/mock-village.mjs` sert `static/` et ment sur les états : pratique pour juger le HUD, inutile en prod.
+
 ## Endpoints
 
 | Chemin | Rôle |

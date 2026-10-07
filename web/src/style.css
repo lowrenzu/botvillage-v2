@@ -1191,3 +1191,165 @@ img.agent-av { width: 36px; height: 36px; border-radius: 12px; }
   line-height: 1.3;
   color: #1c1c1e;
 }
+
+/* ==========================================================================
+   hud/ — in-scene readability (v2). Additive block, safe to port to v4.
+   Chips are styled by hud/LabelLayer: visibility, fade, is-dot, hot, phase.
+   ========================================================================== */
+
+/* —— agent state chip ————————————————————————————————————————————————— */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+  will-change: opacity;
+}
+.tag .tag-name {
+  display: none;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #1c1c1e;
+  max-width: 118px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* name appears only for the selected / hovered agent — the floor stays quiet otherwise */
+.tag.on .tag-name,
+.tag.hot .tag-name {
+  display: inline-block;
+}
+.tag.on .tag-name::after {
+  content: '·';
+  margin-left: 6px;
+  color: var(--mu);
+}
+.tag.hot,
+.tag.on {
+  box-shadow: 0 2px 10px rgba(40, 32, 24, 0.18);
+  border-color: rgba(28, 24, 20, 0.16);
+}
+/* hovered (not selected): a touch larger, never a different word */
+.tag.hot {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 3px 12px rgba(40, 32, 24, 0.22);
+}
+
+/* state colour — the word stays the same, the ink carries the state */
+.tag[data-state='work'] small { color: #8a6a1e; }
+.tag[data-state='talk'] small { color: #6a4a9e; }
+.tag[data-state='walk'] small { color: #2f6ea8; }
+.tag[data-state='idle'] small { color: #6b6560; }
+
+/* no transcript jsonl: honest marker, muted chip */
+.tag.no-feed {
+  border-style: dashed;
+  border-color: rgba(28, 24, 20, 0.22);
+  background: rgba(250, 249, 246, 0.86);
+}
+.tag.no-feed small { color: var(--mu); }
+
+/* prompt phase ring */
+.tag.phase-sent { box-shadow: 0 0 0 2px rgba(94, 155, 214, 0.55), 0 2px 8px rgba(40, 32, 24, 0.14); }
+.tag.phase-acked { box-shadow: 0 0 0 2px rgba(52, 199, 89, 0.55), 0 2px 8px rgba(40, 32, 24, 0.14); }
+.tag.phase-silent { box-shadow: 0 0 0 2px rgba(184, 120, 120, 0.60), 0 2px 8px rgba(40, 32, 24, 0.14); }
+
+/* collapsed chip: what an agent keeps when the space is taken — its roster colour */
+.tag.is-dot {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 1px 4px rgba(40, 32, 24, 0.22);
+  overflow: hidden;
+}
+.tag.is-dot .tag-name,
+.tag.is-dot small { display: none; }
+
+/* —— room chip ————————————————————————————————————————————————————————— */
+.room-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 253, 250, 0.80);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(28, 24, 20, 0.10);
+  box-shadow: 0 2px 10px rgba(40, 32, 24, 0.10);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tx);
+  white-space: nowrap;
+  transition: opacity 0.18s ease;
+}
+.room-chip b { font-weight: 700; letter-spacing: 0.02em; }
+.room-chip em {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mt);
+}
+.room-chip .room-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.room-chip .room-sep { width: 1px; height: 10px; margin: 0 4px; background: rgba(28, 24, 20, 0.16); }
+.room-chip .room-ic { font-size: 9px; margin-right: 5px; opacity: 0.8; }
+/* empty room recedes — the eye goes where the work is */
+.room-chip.quiet { opacity: 0.55; background: rgba(255, 253, 250, 0.62); }
+.room-chip.active { border-width: 1.5px; }
+.room-chip.is-dot {
+  width: 18px; height: 18px; padding: 0; border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.85); overflow: hidden;
+}
+.room-chip.is-dot b,
+.room-chip.is-dot em { display: none; }
+.room-chip.is-dot .room-dot { width: 100%; height: 100%; border-radius: 50%; }
+
+/* —— in-scene status strip ————————————————————————————————————————————— */
+.scene-status {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 253, 250, 0.66);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+  border: 1px solid var(--glass-bd);
+  box-shadow: var(--sh-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tx2);
+  pointer-events: none;
+  user-select: none;
+}
+.scene-status b { font-weight: 700; color: var(--tx); margin-right: 3px; }
+.scene-status .ss-mute { color: var(--mu); }
+.scene-status .ss-link { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.scene-status .ss-link i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--mu);
+  box-shadow: none;
+}
+.scene-status .ss-link.on i { background: var(--live); box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.18); }
+.scene-status .ss-link.down i { background: #b87878; box-shadow: 0 0 0 3px rgba(184, 120, 120, 0.18); }
+.scene-status.off { color: var(--mt); }
+
+@media (max-width: 720px) {
+  .scene-status { left: 10px; bottom: 10px; gap: 8px; padding: 6px 10px; font-size: 11px; }
+  .scene-status .ss-mute { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tag, .room-chip { transition: none; }
+}

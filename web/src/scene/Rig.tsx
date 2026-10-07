@@ -2,6 +2,7 @@ import {useEffect,useMemo,useRef} from 'react'
 import {useFrame,useThree} from '@react-three/fiber'
 import * as THREE from 'three'
 import {step,ui,CLICK_MOVE_MAX} from '../sim'
+import {hudRailWidth} from '../hud/reserved'
 
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v))
 
@@ -38,9 +39,8 @@ function Rig(){
    if((camera as THREE.PerspectiveCamera).clearViewOffset)(camera as THREE.PerspectiveCamera).clearViewOffset()}},[gl,camera])
  useFrame((_,dt)=>{dt=Math.min(dt,.033);step(dt);const v=s.current
   /* keep world (0,0) optically centered in the free left pane (HUD overlays right) */
-  const rail=document.querySelector('.hud-rail') as HTMLElement|null
-  let railW=48
-  if(rail){const r=rail.getBoundingClientRect();railW=Math.max(48,r.width+(window.innerWidth-r.right)+14)}
+  /* cached: reading the rail rect every frame forced a layout flush */
+  const railW=hudRailWidth()
   const cam=camera as THREE.PerspectiveCamera
   /* positive offsetX pans scene left into free pane (negative pushed it under the HUD) */
   if(size.width>720)cam.setViewOffset(size.width,size.height,railW*.55,0,size.width,size.height)
