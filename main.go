@@ -27,6 +27,7 @@ import (
 	"botvillage/internal/hub"
 	"botvillage/internal/roster"
 	"botvillage/internal/skills"
+	"botvillage/internal/snippets"
 	"botvillage/internal/tail"
 	"botvillage/internal/webhook"
 )
@@ -475,14 +476,7 @@ func appendGrokLine(path, text string) error {
 	if rs := []rune(text); len(rs) > 500 {
 		text = string(rs[:500]) + "…"
 	}
-	line, err := json.Marshal(map[string]any{
-		"role": "assistant",
-		"message": map[string]any{
-			"content": []map[string]string{
-				{"type": "text", "text": text},
-			},
-		},
-	})
+	line, err := snippets.AssistantTextLine(text)
 	if err != nil {
 		return err
 	}

@@ -40,11 +40,35 @@ type messageBody struct {
 	Content []contentPart `json:"content"`
 }
 
+// textPart is the prose object on a transcript line.
+// AssistantTextLine writes it; SnippetText reads it through contentPart.
+type textPart struct {
+	Text string `json:"text"`
+	Type string `json:"type"`
+}
+
+type assistantMessage struct {
+	Content []textPart `json:"content"`
+}
+
+type assistantTextLine struct {
+	Message assistantMessage `json:"message"`
+	Role    string           `json:"role"`
+}
+
 type contentPart struct {
-	Type  string          `json:"type"`
+	textPart
 	Name  string          `json:"name"`
-	Text  string          `json:"text"`
 	Input json.RawMessage `json:"input"`
+}
+
+// AssistantTextLine builds the JSONL object for one Grok reply.
+// SnippetText reads this shape, so a reply cannot take a form the bubble parser drops.
+func AssistantTextLine(text string) ([]byte, error) {
+	return json.Marshal(assistantTextLine{
+		Message: assistantMessage{Content: []textPart{{Text: text, Type: "text"}}},
+		Role:    "assistant",
+	})
 }
 
 // ClassifyLine inspects one JSONL line and returns a Kind + role.

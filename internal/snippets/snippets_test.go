@@ -61,6 +61,20 @@ func TestGoalWord(t *testing.T) {
 	}
 }
 
+func TestAssistantTextLineBytes(t *testing.T) {
+	line, err := AssistantTextLine("hello from grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"message":{"content":[{"text":"hello from grok","type":"text"}]},"role":"assistant"}`
+	if string(line) != want {
+		t.Fatalf("got %s", line)
+	}
+	if got := SnippetText(line); got != "hello from grok" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestSnippetTextAssist(t *testing.T) {
 	line := []byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"Briefing reçu — je confirme."}]}}`)
 	got := SnippetText(line)
