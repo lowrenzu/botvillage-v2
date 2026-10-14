@@ -61,11 +61,17 @@ func TestGoalWord(t *testing.T) {
 	}
 }
 
-func TestGenericChatterEmpty(t *testing.T) {
-	for _, k := range []Kind{KindUser, KindTool, KindAssist, KindOther, KindGrowth} {
-		if got := GenericChatter(k); got != "" {
-			t.Fatalf("GenericChatter(%s)=%q want empty", k, got)
-		}
+func TestAssistantTextLineBytes(t *testing.T) {
+	line, err := AssistantTextLine("hello from grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"message":{"content":[{"text":"hello from grok","type":"text"}]},"role":"assistant"}`
+	if string(line) != want {
+		t.Fatalf("got %s", line)
+	}
+	if got := SnippetText(line); got != "hello from grok" {
+		t.Fatalf("got %q", got)
 	}
 }
 

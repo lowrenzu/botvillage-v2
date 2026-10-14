@@ -36,10 +36,6 @@ type botRuntime struct {
 	transcriptUntil time.Time
 	gatewayID       GatewayID
 	gatewayHold     bool // set while SyncGatewayRunning last saw isRunning for this bot
-	// fakeOptimistic is set only when PromptOptimistic invents a state.
-	// PromptRollback may undo that and nothing else (never clobber gateway work).
-	fakeOptimistic bool
-	preOptimistic  string
 }
 
 func (rt *botRuntime) holdUntil() time.Time {
@@ -289,41 +285,9 @@ func (h *Hub) PromptOptimistic(id string) {
 	_ = id
 }
 
-// PromptRollback undoes a fake PromptOptimistic state when /api/prompt fails.
-// If nothing fake was applied, it is a no-op. Gateway isRunning=work is never overridden.
+// PromptRollback is a no-op: PromptOptimistic does not invent a state to undo.
 func (h *Hub) PromptRollback(id string) {
-	h.mu.Lock()
-	rt, ok := h.bots[roster.ID(id)]
-	if !ok || !rt.fakeOptimistic {
-		h.mu.Unlock()
-		return
-	}
-	rt.fakeOptimistic = false
-	now := time.Now()
-	rt.lastEvent = now
-	var act Activity
-	if rt.gatewayHold {
-		rt.bot.State = "work"
-		rt.gatewayUntil = now.Add(liveWorkHold)
-		rt.bot.X = rt.bot.HomeX + 18
-		rt.bot.Y = rt.bot.HomeY - 8
-		rt.bot.Updated = now
-		act = Activity{Type: "state", AgentID: rt.bot.ID, State: "work", Role: rt.bot.LastRole}
-	} else {
-		prev := rt.preOptimistic
-		if prev != "work" && prev != "talk" && prev != "idle" {
-			prev = "idle"
-		}
-		rt.bot.State = prev
-		if prev == "idle" {
-			rt.clearHolds()
-			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
-		}
-		rt.bot.Updated = now
-		act = Activity{Type: "state", AgentID: rt.bot.ID, State: prev, Role: rt.bot.LastRole, Bubble: ""}
-	}
-	h.mu.Unlock()
-	h.broadcast(act)
+	_ = id
 }
 
 // TrackAll registers transcript paths on the watcher.

@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"botvillage/internal/roster"
 )
@@ -38,34 +37,9 @@ func TestPromptOptimisticNoTalk(t *testing.T) {
 	rt := h.bots[id]
 	rt.gatewayHold = true
 	rt.bot.State = "work"
-	rt.fakeOptimistic = false
 	h.mu.Unlock()
 	h.PromptRollback(id)
 	if got := h.Bots()[0].State; got != "work" {
 		t.Fatalf("rollback overrode gateway work: %s", got)
 	}
-
-	h.mu.Lock()
-	rt = h.bots[id]
-	rt.gatewayHold = true
-	rt.fakeOptimistic = true
-	rt.bot.State = "talk"
-	h.mu.Unlock()
-	h.PromptRollback(id)
-	if got := h.Bots()[0].State; got != "work" {
-		t.Fatalf("fake rollback must restore gateway work, got %s", got)
-	}
-
-	h.mu.Lock()
-	rt = h.bots[id]
-	rt.gatewayHold = false
-	rt.fakeOptimistic = true
-	rt.preOptimistic = "idle"
-	rt.bot.State = "talk"
-	h.mu.Unlock()
-	h.PromptRollback(id)
-	if got := h.Bots()[0].State; got != "idle" {
-		t.Fatalf("fake optimistic rollback want idle got %s", got)
-	}
-	_ = time.Now()
 }
