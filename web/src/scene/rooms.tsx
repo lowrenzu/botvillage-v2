@@ -1,6 +1,7 @@
 import {useEffect,useMemo} from 'react'
 import {RoundedBox} from '@react-three/drei'
 import * as THREE from 'three'
+import {DOOR_OFFSET} from '../door'
 import {skillBooks,byVotes,ui,place,setSkillsOpen,setCompetencesOpen,CLICK_MOVE_MAX,type Room,type SkillJSON} from '../sim'
 import { Box, AL, GR, WN, Plant, Workstation, Laptop, Credenza, Chair, Pane, Doorway, scr, KIND, labScr, Metal, cvs, keysTex } from './primitives'
 import { roomWood } from './textures'
@@ -283,8 +284,8 @@ function RoomView({r}:{r:Room}){
     <planeGeometry args={[7.5,7.5]}/>
     <meshBasicMaterial color={r.c} transparent opacity={.28} depthWrite={false}/>
   </mesh>}
-  <Pane p={[0,0,b*5]} len={10} ax="x"/><Pane p={[-5,0,0]} len={10} ax="z"/><Pane p={[5,0,0]} len={10} ax="z"/>
-  <Pane p={[-3.5,0,-b*5]} len={3} ax="x"/><Pane p={[3.5,0,-b*5]} len={3} ax="x"/>
+  <Pane p={[0,0,b*DOOR_OFFSET]} len={10} ax="x"/><Pane p={[-5,0,0]} len={10} ax="z"/><Pane p={[5,0,0]} len={10} ax="z"/>
+  <Pane p={[-3.5,0,-b*DOOR_OFFSET]} len={3} ax="x"/><Pane p={[3.5,0,-b*DOOR_OFFSET]} len={3} ax="x"/>
   <Doorway b={b}/>
   {[[-5,-5],[5,-5],[-5,5],[5,5]].map(([x,z],i)=><Box key={i} p={[x,1.3,z]} a={[.1,2.6,.1]} c={AL} m={.15} ro={.3}/>)}
   <Plant p={[4.3,0,b*4.3]}/>{(r.t==='meet')&&<Plant p={[-4.3,0,b*4.3]}/>}

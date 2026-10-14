@@ -2,6 +2,7 @@
 package roster
 
 import (
+	_ "embed"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -202,18 +203,17 @@ func shortID(id string) string {
 	return id[:8]
 }
 
-// namedPalette mirrors web/src/sim.ts NAMED — API returns hex for distinct client colors.
-var namedPalette = map[string]string{
-	"yellow":  "#c9a84a",
-	"magenta": "#b87a9e",
-	"orange":  "#c48a5a",
-	"blue":    "#5e9bd6",
-	"green":   "#5cb98f",
-	"kaki":    "#8a9260",
-	"black":   "#4a4d53",
-	"cyan":    "#58b3ab",
-	"red":     "#b87878",
-	"purple":  "#8e82b0",
+//go:embed named-colors.json
+var namedColorsJSON []byte
+
+var namedPalette = loadNamedPalette()
+
+func loadNamedPalette() map[string]string {
+	var m map[string]string
+	if err := json.Unmarshal(namedColorsJSON, &m); err != nil {
+		panic("named-colors.json: " + err.Error())
+	}
+	return m
 }
 
 // resolveColor keeps #hex as-is; maps named palette tokens to hex.

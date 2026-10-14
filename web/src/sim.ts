@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from 'react'
+import { DOOR_OFFSET } from './door'
+import namedColors from '../../internal/roster/named-colors.json'
 import { voteOf, castVote, byVotes, bindVotesNotify } from './votes'
 export { voteOf, castVote, byVotes }
 
@@ -55,11 +57,7 @@ export function actionLine(text: string | undefined | null): string {
 }
 
 
-const NAMED: Record<string, string> = {
-  yellow: '#c9a84a', magenta: '#b87a9e', orange: '#c48a5a', blue: '#5e9bd6',
-  green: '#5cb98f', kaki: '#8a9260', black: '#4a4d53', cyan: '#58b3ab',
-  red: '#b87878', purple: '#8e82b0',
-}
+const NAMED: Record<string, string> = namedColors
 
 export function resolveColor(c?: string): string {
   if (!c) return '#5e9bd6'
@@ -98,8 +96,7 @@ export const rooms: Room[] = RD.map(([id, n, x, z, c, t]) => {
     ;[[-2.4, -1.8], [2.4, -1.8], [-2.4, 1.8], [2.4, 1.8]].forEach(([dx, dz]) =>
       S(x + dx, z + dz, dz < 0 ? Math.PI : 0))
   }
-  /* door on corridor-facing wall — matches Doorway at local −s·5 (hall z≈0) */
-  return { id, n, x, z, c, t, s, door: z - s * 5, slots }
+  return { id, n, x, z, c, t, s, door: z - s * DOOR_OFFSET, slots }
 })
 
 export const RM = Object.fromEntries(rooms.map(r => [r.id, r])) as Record<RoomId, Room>
