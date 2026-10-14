@@ -141,7 +141,7 @@ func TestSyncGatewayRunningClearsWhenStopped(t *testing.T) {
 	// Seen, not running, but a transcript work hold (longer than liveWorkHold) stays work.
 	h.bots[id].bot.State = "work"
 	h.bots[id].gatewayHold = true
-	h.bots[id].until = time.Now().Add(transcriptWorkHold)
+	h.bots[id].transcriptUntil = time.Now().Add(transcriptWorkHold)
 	h.mu.Unlock()
 	h.SyncGatewayRunning()
 	h.mu.Lock()
@@ -152,7 +152,7 @@ func TestSyncGatewayRunningClearsWhenStopped(t *testing.T) {
 	if h.bots[id].gatewayHold {
 		t.Fatal("seen not-running should clear gatewayHold")
 	}
-	if !h.bots[id].until.After(time.Now().Add(liveWorkHold)) {
+	if !h.bots[id].transcriptUntil.After(time.Now().Add(liveWorkHold)) {
 		t.Fatal("transcript until was cleared")
 	}
 }
@@ -192,7 +192,7 @@ func TestSyncGatewayOmittedIDKeepsHold(t *testing.T) {
 	h.bots["uuid-running-omitted"].gatewayHold = true
 	h.bots["uuid-transcript-omitted"].bot.State = "work"
 	h.bots["uuid-transcript-omitted"].gatewayHold = false
-	h.bots["uuid-transcript-omitted"].until = time.Now().Add(transcriptWorkHold)
+	h.bots["uuid-transcript-omitted"].transcriptUntil = time.Now().Add(transcriptWorkHold)
 	h.bots["uuid-idle-omitted"].bot.State = "idle"
 	h.mu.Unlock()
 
