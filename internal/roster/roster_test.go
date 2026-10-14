@@ -105,8 +105,37 @@ func TestResolveColorNamedAndHex(t *testing.T) {
 	if got := resolveColor("green"); got != "#5cb98f" {
 		t.Fatalf("named green: %q", got)
 	}
+	if got := resolveColor("Green"); got != "#5cb98f" {
+		t.Fatalf("named green case: %q", got)
+	}
 	if got := resolveColor(""); got != "#5e9bd6" {
 		t.Fatalf("empty default: %q", got)
+	}
+	if got := resolveColor("nope"); got != "nope" {
+		t.Fatalf("unknown token: %q", got)
+	}
+	want := map[string]string{
+		"yellow":  "#c9a84a",
+		"magenta": "#b87a9e",
+		"orange":  "#c48a5a",
+		"blue":    "#5e9bd6",
+		"green":   "#5cb98f",
+		"kaki":    "#8a9260",
+		"black":   "#4a4d53",
+		"cyan":    "#58b3ab",
+		"red":     "#b87878",
+		"purple":  "#8e82b0",
+	}
+	if len(namedPalette) != len(want) {
+		t.Fatalf("palette len %d want %d", len(namedPalette), len(want))
+	}
+	for name, hex := range want {
+		if got := namedPalette[name]; got != hex {
+			t.Fatalf("%s: got %q want %q", name, got, hex)
+		}
+		if got := resolveColor(name); got != hex {
+			t.Fatalf("resolve %s: got %q want %q", name, got, hex)
+		}
 	}
 }
 
