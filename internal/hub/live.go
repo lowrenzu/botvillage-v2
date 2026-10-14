@@ -241,7 +241,7 @@ func (h *Hub) SyncGatewayRunning() {
 		if transcriptHold {
 			continue
 		}
-		if rt.bot.State == "zzz" || rt.bot.State == "work" {
+		if rt.bot.State == "work" {
 			rt.clearHolds()
 			rt.bot.State = "idle"
 			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY

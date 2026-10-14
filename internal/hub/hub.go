@@ -218,12 +218,6 @@ func (h *Hub) Tick() {
 				changed = true
 			}
 		}
-		// Kill lingering invented naps: no gateway/transcript signal for zzz.
-		if rt.bot.State == "zzz" && !rt.gatewayHold {
-			rt.bot.State = "idle"
-			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
-			changed = true
-		}
 		if changed {
 			rt.bot.Updated = now
 			acts = append(acts, Activity{

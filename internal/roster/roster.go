@@ -24,7 +24,7 @@ type Bot struct {
 	Color     string    `json:"color"`
 	HasAvatar bool      `json:"hasAvatar"`
 	LastRole  string    `json:"lastRole"`
-	State     string    `json:"state"` // idle|walk|work|talk|zzz
+	State     string    `json:"state"` // idle|walk|work|talk
 	HomeX     float64   `json:"homeX"`
 	HomeY     float64   `json:"homeY"`
 	X         float64   `json:"x"`

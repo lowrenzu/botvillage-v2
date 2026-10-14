@@ -3,7 +3,7 @@ import { voteOf, castVote, byVotes, bindVotesNotify } from './votes'
 export { voteOf, castVote, byVotes }
 
 export type RoomId = 'grok' | 'build' | 'bot' | 'meeting' | 'competences' | 'skills'
-export type BvState = 'idle' | 'walk' | 'work' | 'talk' | 'zzz'
+export type BvState = 'idle' | 'walk' | 'work' | 'talk'
 
 /** Roster/WS state → bvState. zzz is not a live pose. hasTranscript is irrelevant. */
 export function canonBv(s?: string): BvState {
@@ -255,7 +255,6 @@ function roomForState(a: Agent, state: BvState): Room {
     const desk = rooms.filter(r => r.t === 'desk')
     return desk[Math.abs(hash(a.id)) % desk.length] || RM[a.home]
   }
-  if (state === 'zzz' || state === 'idle') return RM[a.home]
   return RM[a.home]
 }
 
@@ -394,8 +393,6 @@ function clearBubble(a: Agent) {
 }
 
 export function applyBvState(a: Agent, state: BvState, announce = true) {
-  /* Live: zzz banned — coerce to idle (no sleep pose / Zzz log). */
-  if (state === 'zzz') state = 'idle'
   a.bvState = state
   /* Kill sticky Discussion: talkUntil/partner only while bvState===talk. */
   if (state !== 'talk') {
@@ -571,8 +568,6 @@ export function step(dt: number) {
       /* Keep yaw locked on partner while standing in talk/collab. */
       if (a.partnerId) facePartner(a)
     } else {
-      /* Force pose from bvState every tick — sleep cannot stick. */
-      if (a.bvState === 'zzz') a.bvState = 'idle'
       if (a.talkUntil || a.partnerId) {
         a.talkUntil = 0
         clearPartner(a)
