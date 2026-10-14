@@ -190,7 +190,6 @@ func (w *Watcher) Run(ctx context.Context) error {
 				mark(ev.Name)
 			}
 		case <-fsw.Errors:
-			// poll covers gaps
 		case <-pollTick.C:
 			w.mu.Lock()
 			paths := make([]string, 0, len(w.agents))
