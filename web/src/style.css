@@ -96,7 +96,6 @@ html, body, #root {
   height: 100% !important;
 }
 
-/* —— Right HUD rail (all chrome; scene full-bleed left) —— */
 .hud-rail {
   position: absolute;
   top: 14px;
@@ -385,8 +384,6 @@ html, body, #root {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* fake % progress bar removed — honesty (Elon GO) */
-
 .agent .cta {
   display: inline-flex;
   align-items: center;
@@ -633,7 +630,6 @@ button { font: inherit; }
   }
 }
 
-/* —— P1/P2: prompt chips, frieze, phase —— */
 .prompt-block {
   display: flex;
   flex-direction: column;
@@ -673,7 +669,6 @@ button { font: inherit; }
   cursor: default;
 }
 
-/* Prompt phase — always visible chip (idle/sent/acked/silent) */
 .phase-chip,
 .phase-badge {
   display: inline-flex;
@@ -799,7 +794,6 @@ button { font: inherit; }
   border-color: rgba(160, 90, 74, 0.22);
 }
 
-/* —— Mini day timeline (session strip) —— */
 .day-strip {
   display: flex;
   flex-direction: column;
@@ -1016,7 +1010,6 @@ img.av { width: 26px; height: 26px; border-radius: 50%; }
 img.agent-av { width: 36px; height: 36px; border-radius: 12px; }
 
 
-/* P2: mobile / compact rail toggle */
 .rail-toggle {
   margin: 0;
   padding: 4px 8px;

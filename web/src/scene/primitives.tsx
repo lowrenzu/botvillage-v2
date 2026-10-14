@@ -30,7 +30,6 @@ const labScr=cvs(256,160,x=>{x.fillStyle='#1e2430';x.fillRect(0,0,256,160)
  for(let i=0;i<10;i++){const h=18+((i*17)%40);x.fillStyle=i%3?'#3a5a78':'#5a7a98';x.fillRect(14+i*22,130-h,16,h)}
  x.strokeStyle='#6a8aaa';x.lineWidth=1.2;x.beginPath();for(let i=0;i<20;i++){const px=14+i*11,py=42-Math.sin(i/2.6)*10;i?x.lineTo(px,py):x.moveTo(px,py)}x.stroke()
  x.fillStyle='rgba(90,180,120,.55)';for(let i=0;i<8;i++)x.fillRect(148+i*12,28,6,4+(i%2)*3)})
-/* Compétences uses the shared room-scale parquet; racks stay hi-tech. */
 const Metal=({c='#d3d6da',r=.25}:{c?:string;r?:number})=><meshStandardMaterial color={c} metalness={.9} roughness={r}/>
 const Workstation=({kind}:{kind:keyof typeof scr})=><group>
  <RoundedBox args={[1.5,.012,.62]} radius={.006} position={[0,.9,.42]} receiveShadow><meshStandardMaterial color="#4a5560" emissive="#4a5560" emissiveIntensity={0.12} roughness={.85}/></RoundedBox>
@@ -79,7 +78,6 @@ const Doorway=({b}:{b:number})=>{
     <Box p={[0,H-.02,z]} a={[half*2+.12,.1,.16]} c={AL} m={.22} ro={.28}/>
     <Box p={[0,.035,z]} a={[half*2+.2,.07,.32]} c="#b8b3aa" m={.12} ro={.5}/>
     <Box p={[0,.07,z]} a={[half*2+.05,.02,.22]} c={WN} ro={.4} m={.05}/>
-    {/* left leaf */}
     <group position={[-half+.04,0,z]} rotation={[0,swing,0]}>
       <mesh position={[.52,H/2,0]}><boxGeometry args={[1.04,H-.18,.028]}/><meshStandardMaterial color="#dbe6ef" transparent opacity={.16} roughness={.05} metalness={.1} depthWrite={false}/></mesh>
       <Box p={[.52,H-.12,0]} a={[1.06,.06,.04]} c={AL} m={.2} ro={.3}/>
@@ -87,7 +85,6 @@ const Doorway=({b}:{b:number})=>{
       <Box p={[1.02,H/2,0]} a={[.05,H-.18,.04]} c={AL} m={.2} ro={.3}/>
       <Box p={[.52,H/2,0]} a={[.04,H-.18,.04]} c={AL} m={.2} ro={.3}/>
     </group>
-    {/* right leaf */}
     <group position={[half-.04,0,z]} rotation={[0,-swing,0]}>
       <mesh position={[-.52,H/2,0]}><boxGeometry args={[1.04,H-.18,.028]}/><meshStandardMaterial color="#dbe6ef" transparent opacity={.16} roughness={.05} metalness={.1} depthWrite={false}/></mesh>
       <Box p={[-.52,H-.12,0]} a={[1.06,.06,.04]} c={AL} m={.2} ro={.3}/>

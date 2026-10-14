@@ -191,7 +191,6 @@ function CableTray({p,len,ax}:{p:V3;len:number;ax:'x'|'z'}){
       <boxGeometry args={a}/>
       <meshStandardMaterial color="#6b7280" metalness={.55} roughness={.35}/>
     </mesh>
-    {/* hanging cable bundles */}
     {[-len*.3,0,len*.3].map((o,i)=>{
       const cpos:V3=ax==='x'?[o,2.2,0]:[0,2.2,o]
       return <mesh key={i} position={cpos}>
@@ -211,7 +210,6 @@ function ConsoleDesk({p,r=0}:{p:V3;r?:number}){
     <Box p={[-1.25,.43,0]} a={[.08,.86,1.05]} c={GR} m={.75} ro={.3}/>
     <Box p={[1.25,.43,0]} a={[.08,.86,1.05]} c={GR} m={.75} ro={.3}/>
     <Box p={[0,.06,0]} a={[2.7,.08,1.05]} c="#3e4650" e="#3e4650" ei={0.2} m={.32} ro={.42}/>
-    {/* dual monitors — soft screen glow */}
     <group position={[-.55,1.55,-.28]} rotation={[-.08,0,0]}>
       <RoundedBox args={[1.1,.7,.04]} radius={.015}><Metal c="#c9ccd1" r={.3}/></RoundedBox>
       <mesh position={[0,0,.025]}><planeGeometry args={[1.0,.6]}/><meshBasicMaterial map={labScr} toneMapped={false} color="#c8d0d8"/></mesh>

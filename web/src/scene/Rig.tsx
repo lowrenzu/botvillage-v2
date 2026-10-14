@@ -49,7 +49,6 @@ function Rig(){
    /* longer soft inertia coast after drag (Elon cam polish) */
    const damp=Math.exp(-dt*.72);v.vaz*=damp;v.vel*=damp
    if(Math.abs(v.vaz)<2e-4)v.vaz=0;if(Math.abs(v.vel)<2e-4)v.vel=0}
-  /* zoom inertia: integrate vzoom into distWant, then ease dist */
   if(Math.abs(v.vzoom)>1e-5){
    v.distWant=clamp(v.distWant*Math.exp(v.vzoom*dt*60*.016),12,85)
    v.vzoom*=Math.exp(-dt*3.2)
