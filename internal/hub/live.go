@@ -185,11 +185,7 @@ func (h *Hub) SyncGatewayRunning() {
 			prev := rt.bot.State
 			rt.gatewayHold = true
 			rt.lastEvent = now
-			// Extend hold; never shorten a longer transcript-driven until.
-			holdUntil := now.Add(liveWorkHold)
-			if holdUntil.After(rt.until) {
-				rt.until = holdUntil
-			}
+			rt.gatewayUntil = now.Add(liveWorkHold)
 			rt.bot.State = "work"
 			rt.bot.Updated = now
 			rt.bot.X = rt.bot.HomeX + 18
@@ -209,8 +205,8 @@ func (h *Hub) SyncGatewayRunning() {
 
 	// Omitted ids are not an idle signal: keep gatewayHold (last isRunning)
 	// and any transcript hold. Do not invent work for bots that are neither.
-	// Seen and not running: idle only with no transcript hold. until past
-	// liveWorkHold is a transcript hold; the 8s gateway bridge is not.
+	// Seen and not running: idle only with no transcript hold. A transcript
+	// hold with liveWorkHold or less left counts as none.
 	for id, rt := range h.bots {
 		if _, still := busyRosterIDs[id]; still {
 			continue
@@ -219,12 +215,12 @@ func (h *Hub) SyncGatewayRunning() {
 			continue
 		}
 		rt.gatewayHold = false
-		transcriptHold := !rt.until.IsZero() && rt.until.After(now.Add(liveWorkHold))
+		transcriptHold := rt.transcriptUntil.After(now.Add(liveWorkHold))
 		if transcriptHold {
 			continue
 		}
 		if rt.bot.State == "zzz" || rt.bot.State == "work" {
-			rt.until = time.Time{}
+			rt.clearHolds()
 			rt.bot.State = "idle"
 			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
 			rt.bot.Updated = now

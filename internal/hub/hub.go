@@ -30,14 +30,27 @@ type Activity struct {
 }
 
 type botRuntime struct {
-	bot         roster.Bot
-	lastEvent   time.Time
-	until       time.Time
-	gatewayHold bool // set while SyncGatewayRunning last saw isRunning for this bot
+	bot             roster.Bot
+	lastEvent       time.Time
+	gatewayUntil    time.Time
+	transcriptUntil time.Time
+	gatewayHold     bool // set while SyncGatewayRunning last saw isRunning for this bot
 	// fakeOptimistic is set only when PromptOptimistic invents a state.
 	// PromptRollback may undo that and nothing else (never clobber gateway work).
 	fakeOptimistic bool
 	preOptimistic  string
+}
+
+func (rt *botRuntime) holdUntil() time.Time {
+	if rt.gatewayUntil.After(rt.transcriptUntil) {
+		return rt.gatewayUntil
+	}
+	return rt.transcriptUntil
+}
+
+func (rt *botRuntime) clearHolds() {
+	rt.gatewayUntil = time.Time{}
+	rt.transcriptUntil = time.Time{}
 }
 
 // Hub fans out roster + activity to websocket clients.
@@ -131,17 +144,17 @@ func (h *Hub) HandleLine(line tail.Line) {
 		state = "talk"
 		// brief clean user prompt when extractable; never invent
 		bubble = snippets.ActionLine(line.Data)
-		rt.until = now.Add(transcriptTalkHold)
+		rt.transcriptUntil = now.Add(transcriptTalkHold)
 	case snippets.KindTool:
 		state = "work"
 		// Lit/Modifie/Consulte/Recherche only — never a chat sentence or a status word
 		bubble = snippets.ActionLine(line.Data)
-		rt.until = now.Add(transcriptWorkHold)
+		rt.transcriptUntil = now.Add(transcriptWorkHold)
 	case snippets.KindAssist:
 		state = "talk"
 		// action form only; a chat sentence is not a file read
 		bubble = snippets.ActionLine(line.Data)
-		rt.until = now.Add(transcriptTalkHold)
+		rt.transcriptUntil = now.Add(transcriptTalkHold)
 	default:
 		// Unclassified JSONL must not invent walk/work/talk.
 		// Idle only for an explicit idle signal, and never over gateway isRunning.
@@ -150,7 +163,7 @@ func (h *Hub) HandleLine(line tail.Line) {
 			return
 		}
 		state = "idle"
-		rt.until = time.Time{}
+		rt.clearHolds()
 		rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
 	}
 	rt.bot.State = state
@@ -186,8 +199,8 @@ func (h *Hub) Tick() {
 		// Gateway isRunning wins over an expired transcript hold.
 		// A failed poll must not flash Idle while gatewayHold is still set.
 		if rt.gatewayHold {
-			if rt.until.IsZero() || !rt.until.After(now) {
-				rt.until = now.Add(liveWorkHold)
+			if !rt.holdUntil().After(now) {
+				rt.gatewayUntil = now.Add(liveWorkHold)
 			}
 			if rt.bot.State != "work" {
 				rt.bot.State = "work"
@@ -195,8 +208,8 @@ func (h *Hub) Tick() {
 				rt.bot.Y = rt.bot.HomeY - 8
 				changed = true
 			}
-		} else if !rt.until.IsZero() && now.After(rt.until) {
-			rt.until = time.Time{}
+		} else if until := rt.holdUntil(); !until.IsZero() && now.After(until) {
+			rt.clearHolds()
 			if rt.bot.State != "idle" {
 				rt.bot.State = "idle"
 				rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
@@ -295,10 +308,7 @@ func (h *Hub) PromptRollback(id string) {
 	var act Activity
 	if rt.gatewayHold {
 		rt.bot.State = "work"
-		holdUntil := now.Add(liveWorkHold)
-		if holdUntil.After(rt.until) {
-			rt.until = holdUntil
-		}
+		rt.gatewayUntil = now.Add(liveWorkHold)
 		rt.bot.X = rt.bot.HomeX + 18
 		rt.bot.Y = rt.bot.HomeY - 8
 		rt.bot.Updated = now
@@ -310,7 +320,7 @@ func (h *Hub) PromptRollback(id string) {
 		}
 		rt.bot.State = prev
 		if prev == "idle" {
-			rt.until = time.Time{}
+			rt.clearHolds()
 			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
 		}
 		rt.bot.Updated = now
