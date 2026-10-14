@@ -1,7 +1,7 @@
 import {useEffect,useMemo} from 'react'
 import {RoundedBox} from '@react-three/drei'
 import * as THREE from 'three'
-import {skillBooks,byVotes,ui,go,setSkillsOpen,setCompetencesOpen,CLICK_MOVE_MAX,type Room,type SkillJSON} from '../sim'
+import {skillBooks,byVotes,ui,place,setSkillsOpen,setCompetencesOpen,CLICK_MOVE_MAX,type Room,type SkillJSON} from '../sim'
 import { Box, AL, GR, WN, Plant, Workstation, Laptop, Credenza, Chair, Pane, Doorway, scr, KIND, labScr, Metal, cvs, keysTex } from './primitives'
 import { roomWood } from './textures'
 
@@ -271,7 +271,7 @@ function RoomView({r}:{r:Room}){
  const isLib=r.t==='library', isLab=r.t==='lab'
  return <group position={[r.x,0,r.z]}>
   <mesh rotation={[-Math.PI/2,0,0]} position={[0,(isLib||isLab)?0.12:0.04,0]}
-   onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel)go(ui.sel,r)}}>
+   onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel&&ui.sel.bvState!=='work')place(ui.sel,r)}}>
    <planeGeometry args={[8.2,8.2]}/><meshBasicMaterial transparent opacity={0} depthWrite={false}/>
   </mesh>
   {/* one floor only — every room uses the shared roomWood parquet */}

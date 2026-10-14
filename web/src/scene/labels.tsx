@@ -1,6 +1,6 @@
 import {useMemo} from 'react'
 import * as THREE from 'three'
-import {ui,go,CLICK_MOVE_MAX,type Room} from '../sim'
+import {ui,place,CLICK_MOVE_MAX,type Room} from '../sim'
 
 /* Floor etch — Elon DoD: readable no-squint from default ¾ cam.
    Bigger plane + near-white ink on dark plate (prove larger than 6.6×1.7 / 96px). */
@@ -29,7 +29,7 @@ const RoomLabel=({r}:{r:Room})=>{
  /* was 6.6×1.7 @ y=.14 — now ~40% larger + slightly raised */
  return <group position={[r.x,.16,r.z]} rotation={[0,Math.PI,0]}>
   <mesh rotation={[-Math.PI/2,0,0]} receiveShadow
-   onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel)go(ui.sel,r)}}>
+   onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel&&ui.sel.bvState!=='work')place(ui.sel,r)}}>
    <planeGeometry args={[9.2,2.4]}/>
    <meshStandardMaterial map={map} transparent depthWrite={false} roughness={.82} metalness={.04} polygonOffset polygonOffsetFactor={-2}/>
   </mesh>

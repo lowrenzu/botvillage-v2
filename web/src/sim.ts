@@ -29,7 +29,6 @@ export interface Agent {
   x: number; z: number; slot: Slot; room: Room; log: Ev[]
   tin: number; tout: number; tt: number
   promptPhase: PromptPhase
-  talkUntil: number
   /** Short speech text above agent (from WS bubble or collab snippet). */
   bubble: string
   bubbleUntil: number
@@ -226,12 +225,7 @@ function arrive(a: Agent) {
  * Place the agent in a room. No path, no walk pose, no « Rejoint » line.
  * Click, return-home, and talk-to-Réunion must not invent a walk.
  */
-export function go(a: Agent, r: Room) {
-  /* API work is not a trip: stay put, no walk pose, no journal line. */
-  if (a.bvState === 'work') {
-    if (!a.path.length) a.state = 'work'
-    return
-  }
+export function place(a: Agent, r: Room) {
   const q = free(r)
   if (!q) return
   a.path = []
@@ -249,7 +243,7 @@ function homeForIndex(i: number): RoomId {
   return HOME_ORDER[i % HOME_ORDER.length]
 }
 
-function roomForState(a: Agent, state: BvState): Room {
+function roomForState(a: Pick<Agent, 'id' | 'home'>, state: BvState): Room {
   if (state === 'talk') return RM.meeting
   if (state === 'work' || state === 'walk') {
     const desk = rooms.filter(r => r.t === 'desk')
@@ -266,7 +260,8 @@ function hash(s: string) {
 
 function makeAgent(b: BotJSON, index: number): Agent {
   const home = homeForIndex(index)
-  const room = RM[home]
+  const bvState = canonBv(b.state)
+  const room = roomForState({ id: b.id, home }, bvState)
   const slot = free(room) || room.slots[0]
   const color = resolveColor(b.color)
   const title = b.title || ''
@@ -282,7 +277,7 @@ function makeAgent(b: BotJSON, index: number): Agent {
     home,
     path: [],
     state: 'idle',
-    bvState: canonBv(b.state),
+    bvState,
     timer: 4 + Math.random() * 6,
     yaw: slot.f,
     x: slot.x,
@@ -294,7 +289,6 @@ function makeAgent(b: BotJSON, index: number): Agent {
     tout: 0,
     tt: 0,
     promptPhase: 'idle',
-    talkUntil: 0,
     /* First /api/bots snapshot is not a live action. Ignore its bubble. */
     bubble: '',
     bubbleUntil: 0,
@@ -304,24 +298,6 @@ function makeAgent(b: BotJSON, index: number): Agent {
   }
   slot.by = a
   a.state = animFromBv(a)
-  /* Spawn into room matching API state — work never stays at home/lab/servers. */
-  if (a.bvState === 'work' || a.bvState === 'talk' || a.bvState === 'walk') {
-    const target = roomForState(a, a.bvState)
-    if (a.room !== target) {
-      a.slot.by = null
-      const q = free(target) || target.slots[0]
-      q.by = a
-      a.slot = q
-      a.room = target
-      a.x = q.x
-      a.z = q.z
-      a.yaw = q.f
-      a.path = []
-      a.state = animFromBv(a)
-    } else if (a.bvState === 'work') {
-      a.state = 'work'
-    }
-  }
   return a
 }
 
@@ -367,19 +343,7 @@ export function syncRoster(bots: BotJSON[]) {
       /* hasTranscript never gates bvState — tag reads API state only. */
       const st = canonBv(b.state)
       if (st !== a.bvState) applyBvState(a, st, false)
-      else {
-        a.bvState = st
-        /* Re-assert desk/meeting even when state unchanged (fixes stuck-at-home). */
-        if (st === 'work' && a.room.t !== 'desk' && !a.path.length) {
-          applyBvState(a, 'work', false)
-        } else if (st === 'talk' && a.room.id !== 'meeting' && !a.path.length) {
-          applyBvState(a, 'talk', false)
-        } else if (st === 'idle' && a.room.id !== a.home && !a.path.length) {
-          applyBvState(a, 'idle', false)
-        } else {
-          a.state = animFromBv(a)
-        }
-      }
+      else reconcileRoom(a)
     }
   })
   if (!ui.sel && agents.length) ui.sel = agents[0]
@@ -392,39 +356,35 @@ function clearBubble(a: Agent) {
   a.bubbleUntil = 0
 }
 
+function reconcileRoom(a: Agent) {
+  if (!a.path.length && (a.bvState === 'idle' || a.bvState === 'talk')) {
+    const want = roomForState(a, a.bvState)
+    if (a.room !== want) place(a, want)
+  }
+  a.state = animFromBv(a)
+}
+
 export function applyBvState(a: Agent, state: BvState, announce = true) {
   a.bvState = state
-  /* Kill sticky Discussion: talkUntil/partner only while bvState===talk. */
-  if (state !== 'talk') {
-    a.talkUntil = 0
-    clearPartner(a)
-  }
+  if (state !== 'talk') clearPartner(a)
   if (state === 'idle') {
     clearBubble(a)
-    if (a.room.id !== a.home && !a.path.length) go(a, RM[a.home])
-    else if (!a.path.length) { a.state = 'idle'; a.yaw = a.slot.f }
-    emit()
-    return
-  }
-  const target = roomForState(a, state)
-  if (state === 'talk') {
-    a.talkUntil = Math.max(a.talkUntil, performance.now() + 7000)
+    reconcileRoom(a)
+    if (!a.path.length) a.yaw = a.slot.f
+  } else if (state === 'talk') {
     /* feed = operational status; bubble stays real content only (never invent) */
     if (announce) log(a, a.role ? `Parle · ${a.role}` : 'Parle')
-    if (a.room !== target) go(a, target)
-    else {
-      a.state = 'collab'
-      if (!facePartner(a)) a.yaw = a.slot.f
-    }
+    reconcileRoom(a)
+    if (!facePartner(a)) a.yaw = a.slot.f
   } else if (state === 'work') {
     clearPartner(a)
     if (announce) log(a, 'Travail' + (a.role ? ` · ${a.role}` : ''))
     /* do not put status into a.bubble — wait for WS tool name / transcript */
-    if (a.room.t !== 'desk') go(a, target)
-    else { a.state = 'work' }
+    reconcileRoom(a)
   } else if (state === 'walk') {
     if (announce) log(a, 'En déplacement')
-    if (!a.path.length) go(a, target !== a.room ? target : rooms[Math.abs(hash(a.id + 'w')) % rooms.length])
+    const target = roomForState(a, state)
+    if (!a.path.length) place(a, target !== a.room ? target : rooms[Math.abs(hash(a.id + 'w')) % rooms.length])
   }
   emit()
 }
@@ -459,7 +419,6 @@ export function applyActivity(msg: {
       a.bubble = raw
       a.bubbleUntil = Number.POSITIVE_INFINITY
       if (a.bvState === 'talk') {
-        a.talkUntil = Math.max(a.talkUntil, performance.now() + 4500)
         if (a.state !== 'walk') a.state = 'collab'
       } else if (a.bvState === 'work') {
         if (a.state !== 'walk') a.state = 'work'
@@ -514,20 +473,14 @@ function partnerClose(a: Agent, p: Agent) {
   return Math.hypot(p.x - a.x, p.z - a.z) < 2.6
 }
 
-function isTalking(a: Agent, _now: number) {
-  /* Real talk only — talkUntil is visual grace, not a talk source (no sticky collab). */
-  return a.bvState === 'talk'
-}
-
 /** Active talk beams for Scene — unique unordered pairs (local deduction, not transcript). */
 export function collabPairs(): [Agent, Agent][] {
-  const now = performance.now()
   const out: [Agent, Agent][] = []
   const seen = new Set<string>()
   for (const a of agents) {
-    if (!a.partnerId || a.bvState !== 'talk' || !isTalking(a, now)) continue
+    if (!a.partnerId || a.bvState !== 'talk') continue
     const b = agents.find(o => o.id === a.partnerId)
-    if (!b || b.bvState !== 'talk' || !isTalking(b, now)) continue
+    if (!b || b.bvState !== 'talk') continue
     const key = a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id
     if (seen.has(key)) continue
     seen.add(key)
@@ -568,10 +521,7 @@ export function step(dt: number) {
       /* Keep yaw locked on partner while standing in talk/collab. */
       if (a.partnerId) facePartner(a)
     } else {
-      if (a.talkUntil || a.partnerId) {
-        a.talkUntil = 0
-        clearPartner(a)
-      }
+      if (a.partnerId) clearPartner(a)
       a.state = animFromBv(a)
       /* Work away from a desk stays put. Do not walk them to a desk. */
       /* Demo-only ambient stroll — live never invents motion. */
@@ -579,9 +529,9 @@ export function step(dt: number) {
         a.timer -= dt
         if (a.timer <= 0) {
           a.timer = 14 + Math.random() * 22
-          if (a.bvState !== 'idle' && !a.partnerId && Math.random() < 0.4) {
+          if (a.bvState === 'walk' && !a.partnerId && Math.random() < 0.4) {
             const dest = rooms[Math.floor(Math.random() * rooms.length)]
-            if (dest !== a.room) go(a, dest)
+            if (dest !== a.room) place(a, dest)
           }
         }
       }
