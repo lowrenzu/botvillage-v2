@@ -61,14 +61,6 @@ func TestGoalWord(t *testing.T) {
 	}
 }
 
-func TestGenericChatterEmpty(t *testing.T) {
-	for _, k := range []Kind{KindUser, KindTool, KindAssist, KindOther, KindGrowth} {
-		if got := GenericChatter(k); got != "" {
-			t.Fatalf("GenericChatter(%s)=%q want empty", k, got)
-		}
-	}
-}
-
 func TestSnippetTextAssist(t *testing.T) {
 	line := []byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"Briefing reçu — je confirme."}]}}`)
 	got := SnippetText(line)

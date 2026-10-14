@@ -266,13 +266,6 @@ func cleanSnippet(s string) string {
 	return s
 }
 
-// GenericChatter is deprecated for speech bubbles — prefer empty/hidden over
-// invented status ("on it", "hey!"). Kept returning "" so old call sites stay safe.
-func GenericChatter(kind Kind) string {
-	_ = kind
-	return ""
-}
-
 // GoalWord returns an honest truncated snippet from title/description
 // (not a semantic "goal"). Prefer title; else first meaningful description text.
 // Cap ~48 runes so HUD "Extrait" is readable without inventing objectives.
