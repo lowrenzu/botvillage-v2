@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"botvillage/internal/roster"
 )
 
 const (
@@ -30,13 +32,18 @@ type gatewayFile struct {
 	Scheme string `json:"scheme"`
 }
 
+// GatewayID is a gateway listAgents id. The gateway may report a different
+// uuid than the roster.ID of the same bot; matchRuntimeLocked is the only
+// place one becomes the other.
+type GatewayID string
+
 type gatewayAgent struct {
-	ID                 string `json:"id"`
-	Name               string `json:"name"`
-	IsRunning          bool   `json:"isRunning"`
-	IsRunningTurn      bool   `json:"isRunningTurn"`
-	IsComposingMessage bool   `json:"isComposingMessage"`
-	IsRetrying         bool   `json:"isRetrying"`
+	ID                 GatewayID `json:"id"`
+	Name               string    `json:"name"`
+	IsRunning          bool      `json:"isRunning"`
+	IsRunningTurn      bool      `json:"isRunningTurn"`
+	IsComposingMessage bool      `json:"isComposingMessage"`
+	IsRetrying         bool      `json:"isRetrying"`
 }
 
 func (h *Hub) gatewayURL() (base string, token string, ok bool) {
@@ -83,21 +90,36 @@ func decodeGatewayAgents(r io.Reader) ([]gatewayAgent, error) {
 	return wrap.Data, nil
 }
 
-// findRuntimeLocked resolves a gateway agent onto a roster bot.
-// Prefer UUID id; fall back to case-insensitive unique name (uuid vs name mismatch).
+// findRuntimeLocked resolves a gateway agent onto a roster bot and stores the
+// gateway id on it, so later polls resolve by that id.
+// Prefer roster id, then stored gateway id; fall back to case-insensitive
+// unique name (uuid vs name mismatch).
 // Caller must hold h.mu.
-func (h *Hub) findRuntimeLocked(id, name string) *botRuntime {
-	id = strings.TrimSpace(id)
+func (h *Hub) findRuntimeLocked(id GatewayID, name string) *botRuntime {
+	id = GatewayID(strings.TrimSpace(string(id)))
+	rt := h.matchRuntimeLocked(id, name)
+	if rt != nil && id != "" {
+		rt.gatewayID = id
+	}
+	return rt
+}
+
+func (h *Hub) matchRuntimeLocked(id GatewayID, name string) *botRuntime {
 	if id != "" {
-		if rt, ok := h.bots[id]; ok {
+		if rt, ok := h.bots[roster.ID(id)]; ok {
 			return rt
 		}
-		lower := strings.ToLower(id)
+		lower := roster.ID(strings.ToLower(string(id)))
 		if rt, ok := h.bots[lower]; ok {
 			return rt
 		}
 		for _, rt := range h.bots {
-			if strings.EqualFold(rt.bot.ID, id) {
+			if strings.EqualFold(string(rt.bot.ID), string(id)) {
+				return rt
+			}
+		}
+		for _, rt := range h.bots {
+			if rt.gatewayID == id {
 				return rt
 			}
 		}
@@ -155,8 +177,8 @@ func (h *Hub) SyncGatewayRunning() {
 
 	now := time.Now()
 	var acts []Activity
-	busyRosterIDs := make(map[string]struct{})
-	seenRosterIDs := make(map[string]struct{})
+	busyRosterIDs := make(map[roster.ID]struct{})
+	seenRosterIDs := make(map[roster.ID]struct{})
 	var matchedNames []string
 	var unmatched []string
 	var mapLines []string
@@ -167,13 +189,13 @@ func (h *Hub) SyncGatewayRunning() {
 		rt := h.findRuntimeLocked(a.ID, a.Name)
 		label := a.Name
 		if label == "" {
-			label = a.ID
+			label = string(a.ID)
 		}
 		if rt == nil {
 			if busy {
 				unmatched = append(unmatched, label)
 			}
-			mapLines = append(mapLines, label+"(unmatched id="+a.ID+" run="+strconv.FormatBool(a.IsRunning)+")")
+			mapLines = append(mapLines, label+"(unmatched id="+string(a.ID)+" run="+strconv.FormatBool(a.IsRunning)+")")
 			continue
 		}
 		seenRosterIDs[rt.bot.ID] = struct{}{}
@@ -194,13 +216,13 @@ func (h *Hub) SyncGatewayRunning() {
 			if prev != "work" {
 				acts = append(acts, Activity{
 					Type:    "state",
-					AgentID: rt.bot.ID, // always roster id (not gateway id)
+					AgentID: rt.bot.ID,
 					State:   "work",
 					Role:    rt.bot.LastRole,
 				})
 			}
 		}
-		mapLines = append(mapLines, rt.bot.Name+" id="+shortID8(rt.bot.ID)+" run="+strconv.FormatBool(a.IsRunning)+" busy="+strconv.FormatBool(busy)+"→"+mapped)
+		mapLines = append(mapLines, rt.bot.Name+" id="+shortID8(string(rt.bot.ID))+" run="+strconv.FormatBool(a.IsRunning)+" busy="+strconv.FormatBool(busy)+"→"+mapped)
 	}
 
 	// Omitted ids are not an idle signal: keep gatewayHold (last isRunning)

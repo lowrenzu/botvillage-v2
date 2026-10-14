@@ -61,7 +61,7 @@ func Allowed(id string, allow map[string]struct{}) bool {
 func FilterAllowed(bots []Bot, allow map[string]struct{}) []Bot {
 	out := make([]Bot, 0, len(bots))
 	for _, b := range bots {
-		if Allowed(b.ID, allow) {
+		if Allowed(string(b.ID), allow) {
 			out = append(out, b)
 		}
 	}

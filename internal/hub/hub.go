@@ -22,7 +22,7 @@ const (
 // Activity is pushed to browsers; Bubble may carry a short sanitized reply snippet.
 type Activity struct {
 	Type    string       `json:"type"` // state|roster|ping|bubble
-	AgentID string       `json:"agentId,omitempty"`
+	AgentID roster.ID    `json:"agentId,omitempty"`
 	State   string       `json:"state,omitempty"`
 	Role    string       `json:"role,omitempty"`
 	Bubble  string       `json:"bubble,omitempty"`
@@ -34,6 +34,7 @@ type botRuntime struct {
 	lastEvent       time.Time
 	gatewayUntil    time.Time
 	transcriptUntil time.Time
+	gatewayID       GatewayID
 	gatewayHold     bool // set while SyncGatewayRunning last saw isRunning for this bot
 	// fakeOptimistic is set only when PromptOptimistic invents a state.
 	// PromptRollback may undo that and nothing else (never clobber gateway work).
@@ -58,7 +59,7 @@ type Hub struct {
 	Root roster.Root
 
 	mu      sync.Mutex
-	bots    map[string]*botRuntime
+	bots    map[roster.ID]*botRuntime
 	clients map[*websocket.Conn]struct{}
 
 	upgrader websocket.Upgrader
@@ -70,7 +71,7 @@ type Hub struct {
 func New(root roster.Root) *Hub {
 	h := &Hub{
 		Root:    root,
-		bots:    make(map[string]*botRuntime),
+		bots:    make(map[roster.ID]*botRuntime),
 		clients: make(map[*websocket.Conn]struct{}),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: BuildOriginChecker(nil),
@@ -86,7 +87,7 @@ func (h *Hub) RefreshRoster() ([]roster.Bot, error) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	seen := make(map[string]struct{}, len(list))
+	seen := make(map[roster.ID]struct{}, len(list))
 	out := make([]roster.Bot, 0, len(list))
 	now := time.Now()
 	for _, b := range list {
@@ -126,8 +127,9 @@ func (h *Hub) Bots() []roster.Bot {
 
 func (h *Hub) HandleLine(line tail.Line) {
 	kind, role := snippets.ClassifyLine(line.Data)
+	id := roster.ID(line.AgentID)
 	h.mu.Lock()
-	rt, ok := h.bots[line.AgentID]
+	rt, ok := h.bots[id]
 	if !ok {
 		h.mu.Unlock()
 		return
@@ -178,7 +180,7 @@ func (h *Hub) HandleLine(line tail.Line) {
 	}
 	act := Activity{
 		Type:    "state",
-		AgentID: line.AgentID,
+		AgentID: id,
 		State:   state,
 		Role:    rt.bot.LastRole,
 		Bubble:  bubble,
@@ -297,7 +299,7 @@ func (h *Hub) PromptOptimistic(id string) {
 // If nothing fake was applied, it is a no-op. Gateway isRunning=work is never overridden.
 func (h *Hub) PromptRollback(id string) {
 	h.mu.Lock()
-	rt, ok := h.bots[id]
+	rt, ok := h.bots[roster.ID(id)]
 	if !ok || !rt.fakeOptimistic {
 		h.mu.Unlock()
 		return
@@ -312,7 +314,7 @@ func (h *Hub) PromptRollback(id string) {
 		rt.bot.X = rt.bot.HomeX + 18
 		rt.bot.Y = rt.bot.HomeY - 8
 		rt.bot.Updated = now
-		act = Activity{Type: "state", AgentID: id, State: "work", Role: rt.bot.LastRole}
+		act = Activity{Type: "state", AgentID: rt.bot.ID, State: "work", Role: rt.bot.LastRole}
 	} else {
 		prev := rt.preOptimistic
 		if prev != "work" && prev != "talk" && prev != "idle" {
@@ -324,7 +326,7 @@ func (h *Hub) PromptRollback(id string) {
 			rt.bot.X, rt.bot.Y = rt.bot.HomeX, rt.bot.HomeY
 		}
 		rt.bot.Updated = now
-		act = Activity{Type: "state", AgentID: id, State: prev, Role: rt.bot.LastRole, Bubble: ""}
+		act = Activity{Type: "state", AgentID: rt.bot.ID, State: prev, Role: rt.bot.LastRole, Bubble: ""}
 	}
 	h.mu.Unlock()
 	h.broadcast(act)
@@ -338,7 +340,7 @@ func (h *Hub) TrackAll(w *tail.Watcher) error {
 	}
 	for _, b := range bots {
 		if b.Transcript != "" {
-			if err := w.Track(b.ID, b.Transcript); err != nil {
+			if err := w.Track(string(b.ID), b.Transcript); err != nil {
 				log.Printf("track %s: %v", b.ID, err)
 			}
 		}
