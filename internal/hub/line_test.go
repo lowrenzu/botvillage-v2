@@ -11,7 +11,7 @@ import (
 
 func TestHandleLineUnknownDoesNotWalk(t *testing.T) {
 	root := t.TempDir()
-	id := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	const id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 	_ = os.MkdirAll(filepath.Join(root, "agents", id), 0o755)
 	_ = os.WriteFile(filepath.Join(root, "agents", id, "profile.json"), []byte(`{"name":"T"}`), 0o644)
 	h := New(roster.Root{AgentData: root})

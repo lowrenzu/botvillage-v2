@@ -95,7 +95,7 @@ func TestSyncGatewayRunningAllBotsByIDAndName(t *testing.T) {
 
 func TestSyncGatewayRunningClearsWhenStopped(t *testing.T) {
 	dir := t.TempDir()
-	id := "uuid-build"
+	const id = "uuid-build"
 	if err := os.MkdirAll(filepath.Join(dir, "agents", id), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -211,6 +211,57 @@ func TestSyncGatewayOmittedIDKeepsHold(t *testing.T) {
 	}
 	if h.bots["uuid-idle-omitted"].bot.State != "idle" {
 		t.Fatalf("omitted idle must not become work, got %s", h.bots["uuid-idle-omitted"].bot.State)
+	}
+}
+
+func TestFindRuntimeStoresGatewayID(t *testing.T) {
+	dir := t.TempDir()
+	profiles := map[string]string{
+		"uuid-elon":   "Elon Musk",
+		"uuid-grok":   "Grok Bot",
+		"uuid-twin-a": "Twin",
+		"uuid-twin-b": "Twin",
+	}
+	for id, name := range profiles {
+		if err := os.MkdirAll(filepath.Join(dir, "agents", id), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "agents", id, "profile.json"), []byte(`{"name":"`+name+`"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := New(roster.Root{AgentData: dir})
+	if _, err := h.RefreshRoster(); err != nil {
+		t.Fatal(err)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if rt := h.findRuntimeLocked("OTHER-uuid-elon", "Elon Musk"); rt == nil || rt.bot.ID != "uuid-elon" {
+		t.Fatalf("name fallback want uuid-elon got %+v", rt)
+	}
+	if got := h.bots["uuid-elon"].gatewayID; got != "OTHER-uuid-elon" {
+		t.Fatalf("gateway id not stored: %q", got)
+	}
+	if rt := h.findRuntimeLocked("OTHER-uuid-elon", "Elon"); rt == nil || rt.bot.ID != "uuid-elon" {
+		t.Fatalf("stored gateway id want uuid-elon got %+v", rt)
+	}
+
+	if rt := h.findRuntimeLocked("OTHER-uuid-grok", " grok bot "); rt == nil || rt.bot.ID != "uuid-grok" {
+		t.Fatalf("case-insensitive unique name want uuid-grok got %+v", rt)
+	}
+	if rt := h.findRuntimeLocked("UUID-GROK", ""); rt == nil || rt.bot.ID != "uuid-grok" {
+		t.Fatalf("roster id fold want uuid-grok got %+v", rt)
+	}
+
+	if rt := h.findRuntimeLocked("OTHER-twin", "Twin"); rt != nil {
+		t.Fatalf("ambiguous name must not match, got %s", rt.bot.ID)
+	}
+	if h.bots["uuid-twin-a"].gatewayID != "" || h.bots["uuid-twin-b"].gatewayID != "" {
+		t.Fatal("no match must store no gateway id")
+	}
+	if rt := h.findRuntimeLocked("uuid-unknown", "Stranger"); rt != nil {
+		t.Fatalf("unknown agent must not match, got %s", rt.bot.ID)
 	}
 }
 

@@ -12,9 +12,12 @@ import (
 	"botvillage/internal/snippets"
 )
 
+// ID is a roster bot id: its directory name under agents/.
+type ID string
+
 // Bot is a villager on the island.
 type Bot struct {
-	ID        string    `json:"id"`
+	ID        ID        `json:"id"`
 	Name      string    `json:"name"`
 	Title     string    `json:"title"`
 	Goal      string    `json:"goal"`
@@ -101,7 +104,7 @@ func (r Root) List() ([]Bot, error) {
 func (r Root) loadBot(id string, idx int) Bot {
 	hx, hy := homeSlot(idx)
 	b := Bot{
-		ID:      id,
+		ID:      ID(id),
 		Name:    shortID(id),
 		Title:   "",
 		Goal:    "",
