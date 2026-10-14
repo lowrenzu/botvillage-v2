@@ -66,7 +66,6 @@ func (c *Client) Load() error {
 	return nil
 }
 
-// Configured reports whether URL and key are both set.
 func (c *Client) Configured() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -166,7 +165,6 @@ func redactPrompt(s string) string {
 	return ""
 }
 
-// EnsureWakesPerms chmods an existing wakes.jsonl to 0600 if present.
 func (c *Client) EnsureWakesPerms() {
 	if c.WakesPath == "" {
 		return

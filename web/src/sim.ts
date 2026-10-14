@@ -87,12 +87,10 @@ export const rooms: Room[] = RD.map(([id, n, x, z, c, t]) => {
     S(x + Math.sin(a) * 2.9, z + Math.cos(a) * 2.9, a + Math.PI)
   }
   if (t === 'library') {
-    /* standing spots between shelves */
     ;[[-1.8, -1.2], [1.8, -1.2], [-1.8, 1.6], [1.8, 1.6]].forEach(([dx, dz]) =>
       S(x + dx, z + dz, dz < 0 ? Math.PI : 0))
   }
   if (t === 'lab') {
-    /* bench standing positions */
     ;[[-2.4, -1.8], [2.4, -1.8], [-2.4, 1.8], [2.4, 1.8]].forEach(([dx, dz]) =>
       S(x + dx, z + dz, dz < 0 ? Math.PI : 0))
   }
@@ -455,7 +453,6 @@ function faceToward(a: Agent, x: number, z: number) {
   a.yaw = Math.atan2(dx, dz)
 }
 
-/** Face talk/collab partner when paired. Returns true if partner found. */
 function facePartner(a: Agent): boolean {
   if (!a.partnerId) return false
   const p = agents.find(o => o.id === a.partnerId)
@@ -514,7 +511,6 @@ export function step(dt: number) {
       }
     } else if (a.bvState === 'talk') {
       a.state = 'collab'
-      /* Keep yaw locked on partner while standing in talk/collab. */
       if (a.partnerId) facePartner(a)
     } else {
       if (a.partnerId) clearPartner(a)

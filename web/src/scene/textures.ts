@@ -1,6 +1,5 @@
 import * as THREE from 'three'
 
-/* parquet — lower res (P1 textures) */
 const wood=(()=>{const c=document.createElement('canvas');c.width=c.height=512;const x=c.getContext('2d')!
  for(let i=0;i<8;i++){let y=0;while(y<512){const len=140+Math.random()*210,l=62+Math.random()*7
   x.fillStyle=`hsl(${32+Math.random()*4},${36+Math.random()*6}%,${l}%)`;x.fillRect(i*64,y,64,len)

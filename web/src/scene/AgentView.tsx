@@ -93,7 +93,6 @@ const AgentView=memo(function AgentView({a,selected,bvState}:{a:Agent;selected:b
   const pu=.5+.5*Math.sin(t*rate+ph)
   ring.current.scale.setScalar(1+pu*.08)
   ;(ring.current.material as THREE.MeshBasicMaterial).opacity=.5+pu*.3
-  /* membres : démarche (genoux, coudes), bras sur le clavier au poste */
   const sw=Math.sin(t*9+ph)*v.walk,ak=1-Math.exp(-dt*8),typ=atDeskWork?Math.sin(t*15+ph)*.04:0
   const tg=(r:GR,x:number)=>{if(r.current)r.current.rotation.x+=(x-r.current.rotation.x)*ak}
   if(legL.current){legL.current.rotation.x=sw*.55;legR.current.rotation.x=-sw*.55}
@@ -159,17 +158,14 @@ const AgentView=memo(function AgentView({a,selected,bvState}:{a:Agent;selected:b
      <mesh material={mats.black} position={[0,-.465,.06]}><boxGeometry args={[.115,.015,.27]}/></mesh>
     </group>
    </group>)}
-   {/* bassin + colonne d'actionneurs */}
    <mesh material={mats.black} position={[0,.9,0]} castShadow><boxGeometry args={[.3,.14,.2]}/></mesh>
    <mesh material={mats.black} position={[0,1.0,0]}><cylinderGeometry args={[.115,.115,.12,24]}/></mesh>
    {[.965,1.0,1.035].map(y=><mesh key={y} material={mats.metal} position={[0,y,0]} rotation={[Math.PI/2,0,0]} scale={[1,.8,1]}><torusGeometry args={[.118,.007,8,32]}/></mesh>)}
-   {/* buste : coque, barre lumineuse, plaque d'initiale, batterie dorsale */}
    <mesh geometry={torsoGeo} material={mats.shell} position={[0,1.04,0]} scale={[1,1,.74]} castShadow/>
    <mesh position={[0,1.33,.19]}><planeGeometry args={[.12,.06]}/><meshStandardMaterial map={band} transparent roughness={.5} depthWrite={false}/></mesh>
    {avMap&&<mesh position={[0,1.33,.192]}><circleGeometry args={[.045,24]}/><meshBasicMaterial map={avMap} toneMapped={false}/></mesh>}
    <mesh material={mats.black} position={[0,1.22,-.17]} castShadow><boxGeometry args={[.2,.26,.08]}/></mesh>
    <mesh position={[0,1.29,-.212]}><boxGeometry args={[.1,.012,.005]}/><meshBasicMaterial color={a.color}/></mesh>
-   {/* bras : épaule, liseré d'accent, coude, avant-bras, poignet, main */}
    {([[-1,armL,foreL],[1,armR,foreR]] as [number,GR,GR][]).map(([s,ar,fr],i)=><group key={'ar'+i} ref={ar} position={[s*.3,1.4,0]} rotation={[0,0,s*.06]}>
     <mesh material={mats.black} castShadow><sphereGeometry args={[.085,20,14]}/></mesh>
     <mesh material={mats.shell} position={[s*.012,.035,0]} scale={[1,.8,1]} castShadow><sphereGeometry args={[.1,24,16]}/></mesh>

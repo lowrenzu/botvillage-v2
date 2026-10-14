@@ -6,27 +6,22 @@ import {ui,place,CLICK_MOVE_MAX,type Room} from '../sim'
    Bigger plane + near-white ink on dark plate (prove larger than 6.6×1.7 / 96px). */
 const etchLabel=(name:string,accent:string)=>{const c=document.createElement('canvas');c.width=1536;c.height=384;const x=c.getContext('2d')!
  x.clearRect(0,0,1536,384)
- /* deep recessed plate — high contrast vs parquet */
  x.fillStyle='rgba(6,5,4,.92)';x.beginPath();x.roundRect(24,36,1488,312,28);x.fill()
  x.strokeStyle='rgba(0,0,0,.75)';x.lineWidth=6;x.beginPath();x.roundRect(28,40,1480,304,26);x.stroke()
- /* bright rim for etch catch-light */
  x.strokeStyle='rgba(255,250,240,.55)';x.lineWidth=3.5;x.beginPath();x.roundRect(40,52,1456,280,20);x.stroke()
  x.strokeStyle='rgba(255,248,235,.22)';x.lineWidth=1.5;x.beginPath();x.roundRect(52,64,1432,256,16);x.stroke()
- /* accent pip */
  x.fillStyle=accent;x.globalAlpha=.98;x.beginPath();x.arc(128,192,18,0,Math.PI*2);x.fill();x.globalAlpha=1
  x.fillStyle='rgba(255,255,255,.55)';x.beginPath();x.arc(122,184,6,0,Math.PI*2);x.fill()
  x.font='900 148px "Plus Jakarta Sans", system-ui, sans-serif'
  x.textAlign='center';x.textBaseline='middle'
  x.letterSpacing='0.12em' as any
  const label=name.toUpperCase()
- /* deep carved shadow + near-white ink */
  x.fillStyle='rgba(0,0,0,.55)';x.fillText(label,772,210)
  x.fillStyle='rgba(255,252,245,.35)';x.fillText(label,764,168)
  x.fillStyle='rgba(255,253,248,.98)';x.fillText(label,768,188)
  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;t.premultiplyAlpha=true;return t}
 const RoomLabel=({r}:{r:Room})=>{
  const map=useMemo(()=>etchLabel(r.n,r.c),[r.n,r.c])
- /* was 6.6×1.7 @ y=.14 — now ~40% larger + slightly raised */
  return <group position={[r.x,.16,r.z]} rotation={[0,Math.PI,0]}>
   <mesh rotation={[-Math.PI/2,0,0]} receiveShadow
    onClick={e=>{e.stopPropagation();if(ui.moved<CLICK_MOVE_MAX&&ui.sel&&ui.sel.bvState!=='work')place(ui.sel,r)}}>

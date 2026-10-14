@@ -89,7 +89,6 @@ func (h *Hub) RefreshRoster() ([]roster.Bot, error) {
 	for _, b := range list {
 		seen[b.ID] = struct{}{}
 		if rt, ok := h.bots[b.ID]; ok {
-			// preserve runtime state / last role
 			b.State = rt.bot.State
 			b.LastRole = rt.bot.LastRole
 			b.X, b.Y = rt.bot.X, rt.bot.Y
@@ -166,7 +165,6 @@ func (h *Hub) HandleLine(line tail.Line) {
 	}
 	rt.bot.State = state
 	rt.bot.Updated = now
-	// walk toward a "work" spot near home
 	if state == "work" || state == "walk" {
 		rt.bot.X = rt.bot.HomeX + 18
 		rt.bot.Y = rt.bot.HomeY - 8

@@ -30,7 +30,6 @@ func (r Resolver) Path(id string) string {
 	return ""
 }
 
-// Has reports whether an avatar file exists.
 func (r Resolver) Has(id string) bool {
 	return r.Path(id) != ""
 }

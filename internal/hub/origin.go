@@ -38,7 +38,7 @@ func BuildOriginChecker(extra []string) func(*http.Request) bool {
 	return func(r *http.Request) bool {
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
 		if origin == "" {
-			return true // non-browser / curl clients
+			return true
 		}
 		origin = strings.TrimRight(origin, "/")
 		if _, ok := allowed[origin]; ok {

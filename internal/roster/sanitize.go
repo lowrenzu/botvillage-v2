@@ -21,7 +21,6 @@ func SanitizeID(id string) string {
 	return id
 }
 
-// ValidID reports whether id passes SanitizeID.
 func ValidID(id string) bool {
 	return SanitizeID(id) != ""
 }
