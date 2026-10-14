@@ -77,9 +77,6 @@ const AgentView=memo(function AgentView({a,selected,bvState}:{a:Agent;selected:b
   g.current.position.set(v.x,0,v.z)
   let d=a.yaw-g.current.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d))
   g.current.rotation.y+=d*(1-Math.exp(-dt*4))
-  /* Live: no sleep/zzz pose — bvState roster only. */
-  if(a.bvState==='zzz') a.bvState='idle'
-  if(a.state==='sleep') a.state=a.path.length?'walk':(a.bvState==='work'?'work':a.bvState==='talk'?'collab':'idle')
   const walking=a.state==='walk',talking=a.state==='collab'&&a.talkUntil>performance.now()
   const breath=Math.sin(t*1.6+ph)
   const ty=.1+breath*.04+(talking?Math.sin(t*8)*.015:0)+(v.walk*Math.abs(Math.sin(t*9+ph))*.055)
