@@ -45,8 +45,6 @@ export interface BotJSON {
   hasAvatar?: boolean; lastRole?: string; state?: string
   homeX?: number; homeY?: number; x?: number; y?: number
   hasTranscript?: boolean
-  /** « Verbe · cible » from a real tool line, or absent. */
-  bubble?: string
 }
 
 /** Real action bubble only. Chat sentences and status words do not match. */
@@ -289,7 +287,6 @@ function makeAgent(b: BotJSON, index: number): Agent {
     tout: 0,
     tt: 0,
     promptPhase: 'idle',
-    /* First /api/bots snapshot is not a live action. Ignore its bubble. */
     bubble: '',
     bubbleUntil: 0,
     partnerId: null,
@@ -338,8 +335,6 @@ export function syncRoster(bots: BotJSON[]) {
       a.hasAvatar = !!b.hasAvatar
       a.hasTranscript = !!b.hasTranscript
       if (b.lastRole) a.role = b.lastRole
-      /* Roster/API refresh is a snapshot, not a new line. Do not apply b.bubble.
-         A live bubble arrives only on a later WS message (applyActivity). */
       /* hasTranscript never gates bvState — tag reads API state only. */
       const st = canonBv(b.state)
       if (st !== a.bvState) applyBvState(a, st, false)
