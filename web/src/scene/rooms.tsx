@@ -61,9 +61,13 @@ function skillListTex(title: string, skills: SkillJSON[], wide = false, accent =
     }
   })
 }
+function skillsFromKey(key: string): SkillJSON[] {
+  const pairs = JSON.parse(key) as [string, string][]
+  return pairs.map(([id, name]) => ({id, name, source: ''}))
+}
 function SkillBoard({title, skills, p, r = 0, catalog, wide = false, accent = '#58b3ab'}:{title:string; skills:SkillJSON[]; p:V3; r?:number; catalog?:'skills'|'competences'; wide?:boolean; accent?:string}) {
-  const key = skills.map(s => s.id + ':' + s.name).join('|')
-  const map = useMemo(() => skillListTex(title, skills, wide, accent), [key, title, wide, accent]) // eslint-disable-line react-hooks/exhaustive-deps
+  const key = JSON.stringify(skills.map(s => [s.id, s.name]))
+  const map = useMemo(() => skillListTex(title, skillsFromKey(key), wide, accent), [key, title, wide, accent])
   useEffect(() => () => map.dispose(), [map])
   const W = wide ? 7.4 : 2.4
   const H = wide ? 2.28 : 3.0
