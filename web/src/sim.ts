@@ -357,9 +357,13 @@ function clearBubble(a: Agent) {
 }
 
 function reconcileRoom(a: Agent) {
-  if (!a.path.length && (a.bvState === 'idle' || a.bvState === 'talk')) {
-    const want = roomForState(a, a.bvState)
-    if (a.room !== want) place(a, want)
+  if (!a.path.length) {
+    if (a.bvState === 'work') {
+      if (a.room.t !== 'desk') place(a, roomForState(a, 'work'))
+    } else if (a.bvState === 'idle' || a.bvState === 'talk') {
+      const want = roomForState(a, a.bvState)
+      if (a.room !== want) place(a, want)
+    }
   }
   a.state = animFromBv(a)
 }
