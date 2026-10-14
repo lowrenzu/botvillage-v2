@@ -45,7 +45,6 @@ func (r Root) List() []Skill {
 		out = append(out, Skill{ID: id, Name: name, Source: source})
 	}
 
-	// 1) User workflows: AGENT_DATA/workflows/*/SKILL.md
 	wf := filepath.Join(r.AgentData, "workflows")
 	entries, _ := os.ReadDir(wf)
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
@@ -60,7 +59,6 @@ func (r Root) List() []Skill {
 		add(e.Name(), frontmatterName(path), "user")
 	}
 
-	// 2) Managed: AGENT_DATA/managed-skills/skills/*/SKILL.md
 	ms := filepath.Join(r.AgentData, "managed-skills", "skills")
 	entries, _ = os.ReadDir(ms)
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
@@ -75,7 +73,6 @@ func (r Root) List() []Skill {
 		add(e.Name(), frontmatterName(path), "managed")
 	}
 
-	// 3) Plugins: AGENT_DATA/plugins/**/skills/**/SKILL.md
 	plug := filepath.Join(r.AgentData, "plugins")
 	_ = filepath.WalkDir(plug, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d == nil || d.IsDir() {
@@ -91,7 +88,6 @@ func (r Root) List() []Skill {
 		if base == "upstream" {
 			id = filepath.Base(filepath.Dir(dir))
 		}
-		// require a "skills" ancestor
 		if !hasSkillsAncestor(dir) {
 			return nil
 		}

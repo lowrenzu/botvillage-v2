@@ -54,7 +54,6 @@ func New() *Watcher {
 	}
 }
 
-// Events returns the channel of new lines.
 func (w *Watcher) Events() <-chan Line { return w.out }
 
 // Track registers a file to tail from EOF. Empty path is ignored.
@@ -70,7 +69,7 @@ func (w *Watcher) Track(agentID, path string) error {
 	}
 	var off int64
 	if st, err := os.Stat(path); err == nil {
-		off = st.Size() // start at EOF
+		off = st.Size()
 	}
 	w.offsets[path] = off
 	w.sizes[path] = off
@@ -79,7 +78,6 @@ func (w *Watcher) Track(agentID, path string) error {
 	return nil
 }
 
-// Untrack stops watching a path.
 func (w *Watcher) Untrack(path string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -106,7 +104,6 @@ func (w *Watcher) AddDir(dir string) {
 	w.mu.Unlock()
 }
 
-// Run watches until ctx is done.
 func (w *Watcher) Run(ctx context.Context) error {
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -234,7 +231,6 @@ func (w *Watcher) readNew(ctx context.Context, path string) {
 		return
 	}
 	size := st.Size()
-	// Truncation / rewrite: size shrank relative to offset or last size.
 	if size < off || size < lastSize {
 		off = 0
 	}

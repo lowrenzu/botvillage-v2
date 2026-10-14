@@ -57,7 +57,6 @@ func Allowed(id string, allow map[string]struct{}) bool {
 	return ok
 }
 
-// FilterAllowed keeps bots that pass Allowed.
 func FilterAllowed(bots []Bot, allow map[string]struct{}) []Bot {
 	out := make([]Bot, 0, len(bots))
 	for _, b := range bots {

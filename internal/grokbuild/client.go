@@ -39,7 +39,6 @@ func FromEnv(path string) Client {
 
 func (c Client) Configured() bool { return c.Key != "" }
 
-// Reply posts a coding prompt to Grok Build and returns the text.
 func (c Client) Reply(prompt string) (string, error) {
 	if !c.Configured() {
 		return "", fmt.Errorf("missing XAI_API_KEY")

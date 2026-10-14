@@ -16,7 +16,6 @@ import (
 // ID is a roster bot id: its directory name under agents/.
 type ID string
 
-// Bot is a villager on the island.
 type Bot struct {
 	ID        ID        `json:"id"`
 	Name      string    `json:"name"`
@@ -79,7 +78,6 @@ func (r Root) List() ([]Bot, error) {
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		// skip obvious non-agent dirs
 		if name == "assets" || name == "attachments" {
 			continue
 		}
@@ -127,7 +125,7 @@ func (r Root) loadBot(id string, idx int) Bot {
 			b.Title = strings.TrimSpace(p.Title)
 			b.Goal = snippets.GoalWord(p.Title, p.Description)
 			if c := strings.TrimSpace(p.AvatarColor); c != "" {
-				b.Color = resolveColor(c) // profile avatarColor wins; #hex kept as-is
+				b.Color = resolveColor(c)
 			}
 		}
 	}
@@ -144,7 +142,6 @@ func (r Root) loadBot(id string, idx int) Bot {
 	return b
 }
 
-// findTranscript prefers agents/{id}/*.jsonl then agent-transcripts/{id}/{id}.jsonl.
 func (r Root) findTranscript(id string) string {
 	agentDir := filepath.Join(r.AgentsDir(), id)
 	matches, _ := filepath.Glob(filepath.Join(agentDir, "*.jsonl"))
@@ -156,14 +153,12 @@ func (r Root) findTranscript(id string) string {
 		}
 		return m
 	}
-	// common names
 	for _, name := range []string{"transcript.jsonl", "chat.jsonl", id + ".jsonl"} {
 		p := filepath.Join(agentDir, name)
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p
 		}
 	}
-	// live layout fallback: agent-transcripts/{id}/{id}.jsonl (only if agent exists)
 	cand := filepath.Join(r.TranscriptsDir(), id, id+".jsonl")
 	if st, err := os.Stat(cand); err == nil && !st.IsDir() {
 		return cand
@@ -176,7 +171,6 @@ func (r Root) TranscriptPath(id string) string {
 	return r.findTranscript(id)
 }
 
-// transcriptNonempty reports whether path exists and has size > 0.
 func transcriptNonempty(path string) bool {
 	if path == "" {
 		return false

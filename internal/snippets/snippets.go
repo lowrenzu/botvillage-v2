@@ -93,7 +93,6 @@ func ClassifyLine(line []byte) (Kind, string) {
 	case "tool", "function", "tool_result":
 		return KindTool, "tool"
 	case "assistant", "model", "ai":
-		// tool_use inside assistant message counts as tool work
 		if hasToolUse(env.Message) {
 			return KindTool, "assistant"
 		}
@@ -201,7 +200,6 @@ func SnippetText(line []byte) string {
 	if s := cleanSnippet(text); s != "" {
 		return s
 	}
-	// no prose — fall back to concrete tool/action name
 	if name := firstToolName(raw); name != "" {
 		return cleanSnippet(name)
 	}
@@ -271,12 +269,10 @@ func cleanSnippet(s string) string {
 	if s == "" {
 		return ""
 	}
-	// collapse whitespace / strip newlines for bubble
 	s = strings.Join(strings.Fields(s), " ")
 	if s == "" {
 		return ""
 	}
-	// skip internal/hidden prompts and secret-looking content
 	if hiddenPrompt.MatchString(s) {
 		return ""
 	}
@@ -313,7 +309,6 @@ func GoalWord(title, description string) string {
 	if d == "" {
 		return ""
 	}
-	// skip leading dashes/bullets noise
 	fields := strings.Fields(d)
 	out := make([]string, 0, len(fields))
 	for _, f := range fields {
