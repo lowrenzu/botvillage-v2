@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { DOOR_OFFSET } from './door'
 import { voteOf, castVote, byVotes, bindVotesNotify } from './votes'
 export { voteOf, castVote, byVotes }
 
@@ -98,8 +99,7 @@ export const rooms: Room[] = RD.map(([id, n, x, z, c, t]) => {
     ;[[-2.4, -1.8], [2.4, -1.8], [-2.4, 1.8], [2.4, 1.8]].forEach(([dx, dz]) =>
       S(x + dx, z + dz, dz < 0 ? Math.PI : 0))
   }
-  /* door on corridor-facing wall — matches Doorway at local −s·5 (hall z≈0) */
-  return { id, n, x, z, c, t, s, door: z - s * 5, slots }
+  return { id, n, x, z, c, t, s, door: z - s * DOOR_OFFSET, slots }
 })
 
 export const RM = Object.fromEntries(rooms.map(r => [r.id, r])) as Record<RoomId, Room>

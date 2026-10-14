@@ -1,5 +1,6 @@
 import {RoundedBox} from '@react-three/drei'
 import * as THREE from 'three'
+import {DOOR_OFFSET} from '../door'
 
 type V3=[number,number,number]
 
@@ -70,7 +71,7 @@ const Pane=({p,len,ax}:{p:V3;len:number;ax:'x'|'z'})=>{const H=2.6,a:V3=ax==='x'
 /** Framed corridor doorway — aluminum posts + lintel + threshold; glass leaves ajar. */
 const Doorway=({b}:{b:number})=>{
   /* posts at ±2.05 align with Pane gap (−2…2); path go() uses room centerline */
-  const z=-b*5, half=2.05, H=2.6
+  const z=-b*DOOR_OFFSET, half=2.05, H=2.6
   const swing=b>0?.55:-.55
   return <group>
     <Box p={[-half,H/2,z]} a={[.11,H,.14]} c={AL} m={.22} ro={.28}/>
