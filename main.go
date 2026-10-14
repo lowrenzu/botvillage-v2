@@ -360,7 +360,6 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 		body.Prompt = strings.TrimSpace(body.Prompt)
 
 		if body.Action == "skip" {
-			// skip: auth + known agent id (reject empty / unknown)
 			if body.ID == "" || roster.SanitizeID(body.ID) == "" {
 				http.Error(w, `{"error":"invalid id"}`, 400)
 				return
