@@ -461,7 +461,6 @@ export function applyActivity(msg: {
       log(a, raw, 'work')
       a.bubble = raw
       a.bubbleUntil = Number.POSITIVE_INFINITY
-/* Keep work desk pose — only talk bubbles flip to collab. */
       if (a.bvState === 'talk') {
         a.talkUntil = Math.max(a.talkUntil, performance.now() + 4500)
         if (a.state !== 'walk') a.state = 'collab'
@@ -523,23 +522,6 @@ function isTalking(a: Agent, _now: number) {
   return a.bvState === 'talk'
 }
 
-function pairAgents(_a: Agent, _b: Agent, _now: number) {
-  /* No local pairing of two API talk bots. */
-}
-
-/** Walk toward peer inside the same room (short local path, no door hop). */
-function approachPeer(_a: Agent, _b: Agent) {
-  /* No invented short walk toward a peer. */
-}
-
-/**
- * Pair talk/collab agents, send loners to Réunion, walk peers together.
- * Uses real bvState / talkUntil / collab — no fake progress %.
- */
-function resolveMeetups(_now: number) {
-  /* Do not pair talk bots, invent a collab pose, or walk them to Réunion. */
-}
-
 /** Active talk beams for Scene — unique unordered pairs (local deduction, not transcript). */
 export function collabPairs(): [Agent, Agent][] {
   const now = performance.now()
@@ -567,7 +549,6 @@ export const talkPairs = collabPairs
  */
 export function step(dt: number) {
   dt = Math.min(dt, 0.033)
-  const now = performance.now()
   for (const a of agents) {
     if (a.path.length) {
       const w = a.path[0]
@@ -611,7 +592,6 @@ export function step(dt: number) {
       }
     }
   }
-  resolveMeetups(now)
 }
 
 /** Soft ¾ framing of an agent (used by select + Follow). Rig eases az/el/dist. */
