@@ -1,0 +1,26 @@
+== date ==
+Sun Oct 18 00:58:10 UTC 2026
+== gdown ==
+gdown 6.4.2 at /home/runner/.local/lib/python3.12/site-packages
+== attempt 1: gdown ==
+Failed to retrieve file url:
+
+	Cannot retrieve the public link of the file. You may need to change
+	the permission to 'Anyone with the link', or have had many accesses.
+	Check FAQ in https://github.com/wkentaro/gdown?tab=readme-ov-file#faq.
+
+You may still be able to access the file from the browser:
+
+	https://drive.google.com/uc?id=1DUlj-Zvrqq5zRFpI0Ntt3wVoH0O8JSux
+
+but Gdown can't. Please check connections and permissions.
+gdown_exit=1
+== attempt 2: drive.usercontent ==
+code=200 size=920592 type=text/html; charset=utf-8
+curl_exit=0
+== files ==
+total 904
+-rw-r--r-- 1 runner runner    690 Oct 18 00:58 download.log
+-rw-r--r-- 1 runner runner 920592 Oct 18 00:58 megabass_vision_oneten_short_v3.mp4
+.clip-inbox/megabass_vision_oneten_short_v3.mp4: HTML document, ASCII text, with very long lines (65536), with no line terminators
+size=920592
