@@ -24,28 +24,38 @@ jobs:
           DRIVE_ID: ${{ vars.CLIP_DRIVE_ID || '1DUlj-Zvrqq5zRFpI0Ntt3wVoH0O8JSux' }}
           CLIP_NAME: megabass_vision_oneten_short_v3.mp4
         run: |
-          set -euo pipefail
-          python3 -m pip install --quiet --disable-pip-version-check gdown
           mkdir -p .clip-inbox
-          gdown "https://drive.google.com/uc?id=${DRIVE_ID}" -O ".clip-inbox/${CLIP_NAME}"
-          ls -l .clip-inbox
-          stat -c '%s bytes' ".clip-inbox/${CLIP_NAME}"
+          LOG=.clip-inbox/download.log
+          {
+            echo "== gdown version =="
+            python3 -m pip install --quiet --disable-pip-version-check gdown 2>&1
+            python3 -m gdown --version 2>&1
+            echo "== gdown download =="
+            timeout 600 python3 -m gdown "https://drive.google.com/uc?id=${DRIVE_ID}" -O ".clip-inbox/${CLIP_NAME}" 2>&1
+            echo "gdown_exit=$?"
+            echo "== plain curl probe =="
+            curl -sSL -o /dev/null -w 'code=%{http_code} size=%{size_download} type=%{content_type}\n' \
+              "https://drive.google.com/uc?export=download&id=${DRIVE_ID}" 2>&1
+            echo "== files =="
+            ls -l .clip-inbox 2>&1
+          } | tee "$LOG"
+          true
 
       - name: Split if over the 100 MB git limit
         run: |
-          set -euo pipefail
-          cd .clip-inbox
+          cd .clip-inbox || exit 0
           f=megabass_vision_oneten_short_v3.mp4
+          [ -f "$f" ] || exit 0
           size=$(stat -c%s "$f")
           if [ "$size" -gt 94000000 ]; then
             split -b 40M -d -a 3 "$f" part.
             rm -f "$f"
-            ls -l
           fi
+          ls -l
 
       - name: Publish on clip-inbox branch
+        if: always()
         run: |
-          set -euo pipefail
           git config user.name "clip-inbox bot"
           git config user.email "clip-inbox@users.noreply.github.com"
           git checkout --orphan clip-inbox-tmp
