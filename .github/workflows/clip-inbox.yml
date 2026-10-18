@@ -1,0 +1,56 @@
+name: clip-inbox
+
+# Temporary helper: pulls a shared file from Google Drive on a GitHub runner
+# (the runner has full internet, the author's sandbox does not) and publishes
+# it on the `clip-inbox` branch so it can be fetched with git.
+on:
+  push:
+    paths:
+      - ".github/clip-inbox.trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download from Drive
+        env:
+          DRIVE_ID: ${{ vars.CLIP_DRIVE_ID || '1DUlj-Zvrqq5zRFpI0Ntt3wVoH0O8JSux' }}
+          CLIP_NAME: megabass_vision_oneten_short_v3.mp4
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --disable-pip-version-check gdown
+          mkdir -p .clip-inbox
+          gdown "https://drive.google.com/uc?id=${DRIVE_ID}" -O ".clip-inbox/${CLIP_NAME}"
+          ls -l .clip-inbox
+          stat -c '%s bytes' ".clip-inbox/${CLIP_NAME}"
+
+      - name: Split if over the 100 MB git limit
+        run: |
+          set -euo pipefail
+          cd .clip-inbox
+          f=megabass_vision_oneten_short_v3.mp4
+          size=$(stat -c%s "$f")
+          if [ "$size" -gt 94000000 ]; then
+            split -b 40M -d -a 3 "$f" part.
+            rm -f "$f"
+            ls -l
+          fi
+
+      - name: Publish on clip-inbox branch
+        run: |
+          set -euo pipefail
+          git config user.name "clip-inbox bot"
+          git config user.email "clip-inbox@users.noreply.github.com"
+          git checkout --orphan clip-inbox-tmp
+          git rm -r --cached . >/dev/null 2>&1 || true
+          git add -f .clip-inbox
+          git commit -m "clip inbox"
+          git branch -M clip-inbox
+          git push --force origin clip-inbox
