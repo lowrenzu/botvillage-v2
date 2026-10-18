@@ -24,28 +24,38 @@ jobs:
           DRIVE_ID: ${{ vars.CLIP_DRIVE_ID || '1DUlj-Zvrqq5zRFpI0Ntt3wVoH0O8JSux' }}
           CLIP_NAME: megabass_vision_oneten_short_v3.mp4
         run: |
+          set +e
           mkdir -p .clip-inbox
           LOG=.clip-inbox/download.log
+          OUT=".clip-inbox/${CLIP_NAME}"
           {
-            echo "== gdown version =="
-            python3 -m pip install --quiet --disable-pip-version-check gdown 2>&1
-            python3 -m gdown --version 2>&1
-            echo "== gdown download =="
-            timeout 600 python3 -m gdown "https://drive.google.com/uc?id=${DRIVE_ID}" -O ".clip-inbox/${CLIP_NAME}" 2>&1
+            echo "== date =="; date -u
+            echo "== gdown =="
+            python3 -m pip install --quiet --disable-pip-version-check gdown
+            python3 -m gdown --version
+            echo "== attempt 1: gdown =="
+            timeout 900 python3 -m gdown "${DRIVE_ID}" -O "$OUT"
             echo "gdown_exit=$?"
-            echo "== plain curl probe =="
-            curl -sSL -o /dev/null -w 'code=%{http_code} size=%{size_download} type=%{content_type}\n' \
-              "https://drive.google.com/uc?export=download&id=${DRIVE_ID}" 2>&1
+            if [ ! -s "$OUT" ]; then
+              echo "== attempt 2: drive.usercontent =="
+              curl -sSL --retry 3 -o "$OUT" \
+                -w 'code=%{http_code} size=%{size_download} type=%{content_type}\n' \
+                "https://drive.usercontent.google.com/download?id=${DRIVE_ID}&export=download&confirm=t"
+              echo "curl_exit=$?"
+            fi
             echo "== files =="
-            ls -l .clip-inbox 2>&1
-          } | tee "$LOG"
-          true
+            ls -l .clip-inbox
+            if [ -s "$OUT" ]; then file "$OUT"; stat -c 'size=%s' "$OUT"; fi
+          } > "$LOG" 2>&1
+          cat "$LOG"
 
       - name: Split if over the 100 MB git limit
         run: |
+          set +e
           cd .clip-inbox || exit 0
           f=megabass_vision_oneten_short_v3.mp4
-          [ -f "$f" ] || exit 0
+          [ -s "$f" ] || exit 0
+          file "$f" | grep -qi 'video\|MP4' || { echo "not a video"; exit 0; }
           size=$(stat -c%s "$f")
           if [ "$size" -gt 94000000 ]; then
             split -b 40M -d -a 3 "$f" part.
@@ -59,7 +69,7 @@ jobs:
           git config user.name "clip-inbox bot"
           git config user.email "clip-inbox@users.noreply.github.com"
           git checkout --orphan clip-inbox-tmp
-          git rm -r --cached . >/dev/null 2>&1 || true
+          git rm -r --cached . >/dev/null 2>&1
           git add -f .clip-inbox
           git commit -m "clip inbox"
           git branch -M clip-inbox
